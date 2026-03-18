@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Asset, Version, TeamMember } from "@/types";
@@ -23,6 +23,7 @@ export default function Analytics() {
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [ops, setOps] = useState<DerivedOp[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const fetchData = async () => {
@@ -93,6 +94,7 @@ export default function Analytics() {
       Secondary: [],
       Inhouse: []
     };
+    
     assets.forEach(a => {
       if (a.studio === 'Inhouse') {
         groups.Inhouse.push(a);
@@ -102,7 +104,13 @@ export default function Analytics() {
         groups.Secondary.push(a);
       }
     });
-    return groups;
+
+    const grouped: Record<string, Asset[]> = {};
+    Object.entries(groups).forEach(([key, list]) => {
+      grouped[key] = list.filter(a => !a.parentId).sort((a, b) => calculateProgress(b) - calculateProgress(a));
+    });
+
+    return grouped;
   };
 
   const getEfficiencyData = () => {
@@ -127,6 +135,16 @@ export default function Analytics() {
     return last14Days.map(day => ({ date: day.split('-').slice(1).join('/'), events: days[day] }));
   };
 
+  const toggleExpand = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const efficiencyRate = ops.filter(o => o.onTime !== 'N/A').length > 0
     ? Math.round((ops.filter(o => o.onTime === true).length / ops.filter(o => o.onTime !== 'N/A').length) * 100)
     : 0;
@@ -147,6 +165,97 @@ export default function Analytics() {
 
   const artistList = Array.from(new Set(assets.flatMap(a => a.assignedArtists || []))).sort();
   const assetGroups = groupAssets();
+
+  const renderProgressionRow = (asset: Asset, groupName: string) => {
+    const progress = calculateProgress(asset);
+    const children = assets.filter(v => v.parentId === asset.id);
+    const hasVariations = children.length > 0;
+    const isExpanded = expandedRows.has(asset.id);
+
+    return (
+      <Fragment key={asset.id}>
+        <tr 
+          className={`group hover:bg-white/[0.02] transition-all cursor-pointer ${asset.parentId ? 'bg-white/[0.01]' : ''}`}
+          onClick={() => window.location.href = `/assets/${asset.id}`}
+        >
+          <td className="px-8 py-5">
+            <div className="flex items-center gap-3">
+              {!asset.parentId && hasVariations && (
+                <button 
+                  onClick={(e) => toggleExpand(asset.id, e)}
+                  className="p-1 hover:bg-white/10 rounded transition-colors text-slate-500"
+                >
+                  <ChevronRight className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                </button>
+              )}
+              {asset.parentId && (
+                <div className="w-3 h-3 border-l border-b border-white/20 rounded-bl-sm ml-2 flex-shrink-0" />
+              )}
+              <div className="flex flex-col min-w-0">
+                <span className={`text-sm font-black text-white uppercase tracking-tight group-hover:text-orange-400 transition-colors ${asset.parentId ? 'text-slate-400' : ''}`}>
+                  {asset.name}
+                </span>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">{asset.type}</span>
+                  {asset.parentId && (
+                    <>
+                      <span className="w-1 h-1 rounded-full bg-slate-800"></span>
+                      <span className="text-[7px] font-black text-slate-600 uppercase">Variation</span>
+                    </>
+                  )}
+                  <span className="w-1 h-1 rounded-full bg-slate-800"></span>
+                  <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">{asset.studio}</span>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td className="px-6 py-5 text-center">
+            <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border ${
+              asset.status === 'Approved' ? 'text-emerald-500 border-emerald-500/20 bg-emerald-500/5' :
+              asset.status === 'Final Review' ? 'text-orange-500 border-orange-500/20 bg-orange-500/5' :
+              'text-slate-400 border-white/5 bg-white/5'
+            }`}>
+              {asset.status}
+            </span>
+          </td>
+          <td className="px-6 py-5">
+            <div className="flex flex-col gap-2">
+              <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden border border-white/5 relative">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${progress}%` }}
+                  className={`h-full absolute top-0 left-0 ${
+                    progress === 100 ? 'bg-emerald-500' : 
+                    groupName === 'Primary' ? 'bg-orange-500' : 'bg-blue-500'
+                  }`}
+                />
+              </div>
+              <div className="flex justify-between gap-1">
+                {['INPUT', '1P', 'TEX', 'FP', 'DONE'].map((m, i) => {
+                  const approved = [asset.bmApproved, asset.fpApproved, asset.gsApproved, asset.finalApproved, asset.status === 'Approved'][i];
+                  return (
+                    <div key={m} className="flex flex-col items-center gap-1">
+                      <div className={`w-1.5 h-1.5 rounded-full transition-all ${approved ? 'bg-emerald-500 shadow-[0_0_5px_#10b981]' : 'bg-slate-800'}`}></div>
+                      <span className={`text-[6px] font-black uppercase ${approved ? 'text-emerald-600' : 'text-slate-700'}`}>{m}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </td>
+          <td className="px-6 py-5 text-center">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{asset.assignedArtists?.[0] || "—"}</span>
+          </td>
+          <td className="px-8 py-5 text-right">
+            <span className={`text-sm font-black tabular-nums ${progress === 100 ? 'text-emerald-500' : 'text-blue-500'}`}>
+              {Math.round(progress)}%
+            </span>
+          </td>
+        </tr>
+        {isExpanded && children.map(v => renderProgressionRow(v, groupName))}
+      </Fragment>
+    );
+  };
 
   return (
     <div className="max-w-full mx-auto px-4 py-12 custom-scrollbar">
@@ -411,6 +520,13 @@ export default function Analytics() {
                   const memberAssets = assets.filter(a => a.assignedArtists?.includes(member.name));
                   const memberReviews = versions.filter(v => v.reviewerId === member.id || v.reviewerModelId === member.id || v.reviewerRigId === member.id);
                   
+                  // Complete list of involved assets throughout production lifetime
+                  const uniqueAssetIds = new Set([
+                    ...memberAssets.map(a => a.id),
+                    ...memberReviews.map(v => v.assetId)
+                  ]);
+                  const uniqueInvolvedAssets = assets.filter(a => uniqueAssetIds.has(a.id));
+
                   const memberOps = ops.filter(o => {
                     const a = assets.find(as => as.id === o.assetId);
                     if (member.role === 'Artist') return a?.assignedArtists?.includes(member.name);
@@ -445,76 +561,103 @@ export default function Analytics() {
                   const efficiency = validOps.length > 0 ? Math.round((onTime / validOps.length) * 100) : 0;
 
                   return (
-                    <tr key={member.id} className="group hover:bg-white/[0.02] transition-all">
-                      <td className="px-8 py-5">
-                        <div className="flex items-center gap-4">
-                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                            member.role === 'Reviewer' ? 'bg-blue-500/10 text-blue-500' : 
-                            member.role === 'Ops' ? 'bg-purple-500/10 text-purple-500' : 'bg-emerald-500/10 text-emerald-500'
-                          }`}>
-                            {member.role === 'Reviewer' ? <ShieldCheck className="w-5 h-5" /> : member.role === 'Ops' ? <Activity className="w-5 h-5" /> : <Users className="w-5 h-5" />}
+                    <Fragment key={member.id}>
+                      <tr className="group hover:bg-white/[0.02] transition-all">
+                        <td className="px-8 py-5">
+                          <div className="flex items-center gap-4">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                              member.role === 'Reviewer' ? 'bg-blue-500/10 text-blue-500' : 
+                              member.role === 'Ops' ? 'bg-purple-500/10 text-purple-500' : 'bg-emerald-500/10 text-emerald-500'
+                            }`}>
+                              {member.role === 'Reviewer' ? <ShieldCheck className="w-5 h-5" /> : member.role === 'Ops' ? <Activity className="w-5 h-5" /> : <Users className="w-5 h-5" />}
+                            </div>
+                            <div>
+                              <div className="text-sm font-black text-white uppercase tracking-tight group-hover:text-purple-400 transition-colors">{member.name}</div>
+                              <div className="text-[8px] font-bold text-slate-500 uppercase tracking-[0.2em]">{member.role}</div>
+                            </div>
                           </div>
-                          <div>
-                            <div className="text-sm font-black text-white uppercase tracking-tight group-hover:text-purple-400 transition-colors">{member.name}</div>
-                            <div className="text-[8px] font-bold text-slate-500 uppercase tracking-[0.2em]">{member.role}</div>
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <span className="text-sm font-bold text-white tabular-nums">{memberAssets.length + memberReviews.length}</span>
+                          <span className="text-[8px] font-bold text-slate-600 uppercase ml-2">Total</span>
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <div className="flex items-center justify-center gap-3">
+                            <div className="text-center">
+                              <div className="text-sm font-bold text-blue-400 tabular-nums">{active}</div>
+                              <div className="text-[7px] font-black text-slate-600 uppercase">Active</div>
+                            </div>
+                            <div className="w-px h-4 bg-white/5"></div>
+                            <div className="text-center">
+                              <div className="text-sm font-bold text-emerald-400 tabular-nums">{done}</div>
+                              <div className="text-[7px] font-black text-slate-600 uppercase">Done</div>
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-5 text-center">
-                        <span className="text-sm font-bold text-white tabular-nums">{memberAssets.length + memberReviews.length}</span>
-                        <span className="text-[8px] font-bold text-slate-600 uppercase ml-2">Total</span>
-                      </td>
-                      <td className="px-6 py-5 text-center">
-                        <div className="flex items-center justify-center gap-3">
-                          <div className="text-center">
-                            <div className="text-sm font-bold text-blue-400 tabular-nums">{active}</div>
-                            <div className="text-[7px] font-black text-slate-600 uppercase">Active</div>
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <span className="text-sm font-bold text-slate-300 tabular-nums">{memberOps.length}</span>
+                          <span className="text-[8px] font-bold text-slate-600 uppercase ml-2">Ops</span>
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                            <span className="text-[10px] font-black text-emerald-500 tabular-nums">{onTime}</span>
                           </div>
-                          <div className="w-px h-4 bg-white/5"></div>
-                          <div className="text-center">
-                            <div className="text-sm font-bold text-emerald-400 tabular-nums">{done}</div>
-                            <div className="text-[7px] font-black text-slate-600 uppercase">Done</div>
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/20">
+                            <span className="text-[10px] font-black text-red-500 tabular-nums">{delayed}</span>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-5 text-center">
-                        <span className="text-sm font-bold text-slate-300 tabular-nums">{memberOps.length}</span>
-                        <span className="text-[8px] font-bold text-slate-600 uppercase ml-2">Ops</span>
-                      </td>
-                      <td className="px-6 py-5 text-center">
-                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                          <span className="text-[10px] font-black text-emerald-500 tabular-nums">{onTime}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-5 text-center">
-                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/20">
-                          <span className="text-[10px] font-black text-red-500 tabular-nums">{delayed}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-5 text-center">
-                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-500/10 border border-orange-500/20">
-                          <span className="text-[10px] font-black text-orange-500 tabular-nums">{reworks}</span>
-                        </div>
-                      </td>
-                      <td className="px-8 py-5 text-right">
-                        <div className="flex flex-col items-end">
-                          <div className={`text-lg font-black tabular-nums ${
-                            efficiency >= 85 ? 'text-emerald-500' : efficiency >= 60 ? 'text-yellow-500' : 'text-red-500'
-                          }`}>
-                            {efficiency}%
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-500/10 border border-orange-500/20">
+                            <span className="text-[10px] font-black text-orange-500 tabular-nums">{reworks}</span>
                           </div>
-                          <div className="w-24 h-1 bg-white/5 rounded-full overflow-hidden mt-1">
-                            <motion.div 
-                              initial={{ width: 0 }}
-                              animate={{ width: `${efficiency}%` }}
-                              className={`h-full ${
-                                efficiency >= 85 ? 'bg-emerald-500' : efficiency >= 60 ? 'bg-yellow-500' : 'bg-red-500'
-                              }`}
-                            />
+                        </td>
+                        <td className="px-8 py-5 text-right">
+                          <div className="flex flex-col items-end">
+                            <div className={`text-lg font-black tabular-nums ${
+                              efficiency >= 85 ? 'text-emerald-500' : efficiency >= 60 ? 'text-yellow-500' : 'text-red-500'
+                            }`}>
+                              {efficiency}%
+                            </div>
+                            <div className="w-24 h-1 bg-white/5 rounded-full overflow-hidden mt-1">
+                              <motion.div 
+                                initial={{ width: 0 }}
+                                animate={{ width: `${efficiency}%` }}
+                                className={`h-full ${
+                                  efficiency >= 85 ? 'bg-emerald-500' : efficiency >= 60 ? 'bg-yellow-500' : 'bg-red-500'
+                                }`}
+                              />
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                    </tr>
+                        </td>
+                      </tr>
+                      {/* Assets Involvement Sub-row */}
+                      <tr className="bg-white/[0.01]">
+                        <td colSpan={8} className="px-8 py-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest mr-2">Lifetime Involvement:</span>
+                            {uniqueInvolvedAssets.length === 0 ? (
+                              <span className="text-[8px] text-slate-700 font-bold uppercase italic">No records detected</span>
+                            ) : (
+                              uniqueInvolvedAssets.map(asset => (
+                                <Link 
+                                  key={asset.id} 
+                                  href={`/assets/${asset.id}`}
+                                  className={`text-[7px] font-black px-2 py-0.5 rounded-md border transition-all hover:border-blue-500/50 ${
+                                    asset.status === 'Approved' ? 'text-emerald-500 border-emerald-500/20 bg-emerald-500/5' :
+                                    asset.status === 'Final Review' ? 'text-orange-500 border-orange-500/20 bg-orange-500/5' :
+                                    'text-slate-400 border-white/5 bg-white/5'
+                                  }`}
+                                >
+                                  {asset.name}
+                                </Link>
+                              ))
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -576,69 +719,7 @@ export default function Analytics() {
                         </td>
                       </tr>
                     ) : (
-                      groupAssets.sort((a, b) => calculateProgress(b) - calculateProgress(a)).map((asset) => {
-                        const progress = calculateProgress(asset);
-                        return (
-                          <tr 
-                            key={asset.id} 
-                            className="group hover:bg-white/[0.02] transition-all cursor-pointer"
-                            onClick={() => window.location.href = `/assets/${asset.id}`}
-                          >
-                            <td className="px-8 py-5">
-                              <div className="flex flex-col">
-                                <span className="text-sm font-black text-white uppercase tracking-tight group-hover:text-orange-400 transition-colors">{asset.name}</span>
-                                <div className="flex items-center gap-2 mt-0.5">
-                                  <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">{asset.type}</span>
-                                  <span className="w-1 h-1 rounded-full bg-slate-800"></span>
-                                  <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">{asset.studio}</span>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-5 text-center">
-                              <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border ${
-                                asset.status === 'Approved' ? 'text-emerald-500 border-emerald-500/20 bg-emerald-500/5' :
-                                asset.status === 'Final Review' ? 'text-orange-500 border-orange-500/20 bg-orange-500/5' :
-                                'text-slate-400 border-white/5 bg-white/5'
-                              }`}>
-                                {asset.status}
-                              </span>
-                            </td>
-                            <td className="px-6 py-5">
-                              <div className="flex flex-col gap-2">
-                                <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden border border-white/5 relative">
-                                  <motion.div 
-                                    initial={{ width: 0 }}
-                                    animate={{ width: `${progress}%` }}
-                                    className={`h-full absolute top-0 left-0 ${
-                                      progress === 100 ? 'bg-emerald-500' : 
-                                      groupName === 'Primary' ? 'bg-orange-500' : 'bg-blue-500'
-                                    }`}
-                                  />
-                                </div>
-                                <div className="flex justify-between gap-1">
-                                  {['INPUT', '1P', 'TEX', 'FP', 'DONE'].map((m, i) => {
-                                    const approved = [asset.bmApproved, asset.fpApproved, asset.gsApproved, asset.finalApproved, asset.status === 'Approved'][i];
-                                    return (
-                                      <div key={m} className="flex flex-col items-center gap-1">
-                                        <div className={`w-1.5 h-1.5 rounded-full transition-all ${approved ? 'bg-emerald-500 shadow-[0_0_5px_#10b981]' : 'bg-slate-800'}`}></div>
-                                        <span className={`text-[6px] font-black uppercase ${approved ? 'text-emerald-600' : 'text-slate-700'}`}>{m}</span>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-5 text-center">
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{asset.assignedArtists?.[0] || "—"}</span>
-                            </td>
-                            <td className="px-8 py-5 text-right">
-                              <span className={`text-sm font-black tabular-nums ${progress === 100 ? 'text-emerald-500' : 'text-blue-500'}`}>
-                                {Math.round(progress)}%
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })
+                      groupAssets.map((asset) => renderProgressionRow(asset, groupName))
                     )}
                   </tbody>
                 </table>

@@ -3,9 +3,9 @@ export type AssetStatus = 'Not Started' | 'Base input' | 'Grey scale Model(1st p
 export type VersionStage = 'Base input' | 'Grey scale Model(1st pass)' | 'Texture' | 'Final Package' | string;
 export type VersionStatus = 'Pending Review' | 'Corrections Needed' | 'Approved';
 export type StudioName = 'Xentrix' | 'Innovative Colors' | 'Inhouse' | 'Other';
-
 export interface Asset {
   id: string;
+  parentId?: string; // ID of the main asset if this is a variation
   name: string;
   type: AssetType;
   status: AssetStatus;
