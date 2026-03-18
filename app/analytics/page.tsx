@@ -398,6 +398,7 @@ export default function Analytics() {
                 <tr className="bg-white/[0.03] border-b border-white/5">
                   <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Team Member</th>
                   <th className="px-6 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] text-center">Involvement</th>
+                  <th className="px-6 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] text-center">Assets Involvement</th>
                   <th className="px-6 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] text-center">Workload</th>
                   <th className="px-6 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] text-center">Deliverables</th>
                   <th className="px-6 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] text-center">On Time</th>
@@ -411,6 +412,13 @@ export default function Analytics() {
                   const memberAssets = assets.filter(a => a.assignedArtists?.includes(member.name));
                   const memberReviews = versions.filter(v => v.reviewerId === member.id || v.reviewerModelId === member.id || v.reviewerRigId === member.id);
                   
+                  // Complete list of involved assets
+                  const involvedAssetIds = new Set([
+                    ...memberAssets.map(a => a.id),
+                    ...memberReviews.map(v => v.assetId)
+                  ]);
+                  const uniqueInvolvedAssets = assets.filter(a => involvedAssetIds.has(a.id));
+
                   const memberOps = ops.filter(o => {
                     const a = assets.find(as => as.id === o.assetId);
                     if (member.role === 'Artist') return a?.assignedArtists?.includes(member.name);
@@ -463,6 +471,28 @@ export default function Analytics() {
                       <td className="px-6 py-5 text-center">
                         <span className="text-sm font-bold text-white tabular-nums">{memberAssets.length + memberReviews.length}</span>
                         <span className="text-[8px] font-bold text-slate-600 uppercase ml-2">Total</span>
+                      </td>
+                      <td className="px-6 py-5 max-w-[200px]">
+                        <div className="flex flex-wrap gap-1 justify-center">
+                          {uniqueInvolvedAssets.length === 0 ? (
+                            <span className="text-[8px] text-slate-700 font-bold uppercase italic">None</span>
+                          ) : (
+                            uniqueInvolvedAssets.map(asset => (
+                              <Link 
+                                key={asset.id} 
+                                href={`/assets/${asset.id}`}
+                                className={`text-[7px] font-black px-1.5 py-0.5 rounded-md border transition-all hover:scale-105 ${
+                                  asset.status === 'Approved' ? 'text-emerald-500 border-emerald-500/20 bg-emerald-500/5' :
+                                  asset.status === 'Final Review' ? 'text-orange-500 border-orange-500/20 bg-orange-500/5' :
+                                  'text-slate-400 border-white/10 bg-white/5'
+                                }`}
+                                title={`${asset.name} (${asset.status})`}
+                              >
+                                {asset.name}
+                              </Link>
+                            ))
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-5 text-center">
                         <div className="flex items-center justify-center gap-3">
