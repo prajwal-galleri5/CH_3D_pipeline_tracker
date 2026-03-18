@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Asset, Version, TeamMember } from "@/types";
@@ -398,7 +398,6 @@ export default function Analytics() {
                 <tr className="bg-white/[0.03] border-b border-white/5">
                   <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Team Member</th>
                   <th className="px-6 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] text-center">Involvement</th>
-                  <th className="px-6 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] text-center">Assets Involvement</th>
                   <th className="px-6 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] text-center">Workload</th>
                   <th className="px-6 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] text-center">Deliverables</th>
                   <th className="px-6 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] text-center">On Time</th>
@@ -412,12 +411,12 @@ export default function Analytics() {
                   const memberAssets = assets.filter(a => a.assignedArtists?.includes(member.name));
                   const memberReviews = versions.filter(v => v.reviewerId === member.id || v.reviewerModelId === member.id || v.reviewerRigId === member.id);
                   
-                  // Complete list of involved assets
-                  const involvedAssetIds = new Set([
+                  // Complete list of involved assets throughout production lifetime
+                  const uniqueAssetIds = new Set([
                     ...memberAssets.map(a => a.id),
                     ...memberReviews.map(v => v.assetId)
                   ]);
-                  const uniqueInvolvedAssets = assets.filter(a => involvedAssetIds.has(a.id));
+                  const uniqueInvolvedAssets = assets.filter(a => uniqueAssetIds.has(a.id));
 
                   const memberOps = ops.filter(o => {
                     const a = assets.find(as => as.id === o.assetId);
@@ -453,98 +452,103 @@ export default function Analytics() {
                   const efficiency = validOps.length > 0 ? Math.round((onTime / validOps.length) * 100) : 0;
 
                   return (
-                    <tr key={member.id} className="group hover:bg-white/[0.02] transition-all">
-                      <td className="px-8 py-5">
-                        <div className="flex items-center gap-4">
-                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                            member.role === 'Reviewer' ? 'bg-blue-500/10 text-blue-500' : 
-                            member.role === 'Ops' ? 'bg-purple-500/10 text-purple-500' : 'bg-emerald-500/10 text-emerald-500'
-                          }`}>
-                            {member.role === 'Reviewer' ? <ShieldCheck className="w-5 h-5" /> : member.role === 'Ops' ? <Activity className="w-5 h-5" /> : <Users className="w-5 h-5" />}
+                    <Fragment key={member.id}>
+                      <tr className="group hover:bg-white/[0.02] transition-all">
+                        <td className="px-8 py-5">
+                          <div className="flex items-center gap-4">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                              member.role === 'Reviewer' ? 'bg-blue-500/10 text-blue-500' : 
+                              member.role === 'Ops' ? 'bg-purple-500/10 text-purple-500' : 'bg-emerald-500/10 text-emerald-500'
+                            }`}>
+                              {member.role === 'Reviewer' ? <ShieldCheck className="w-5 h-5" /> : member.role === 'Ops' ? <Activity className="w-5 h-5" /> : <Users className="w-5 h-5" />}
+                            </div>
+                            <div>
+                              <div className="text-sm font-black text-white uppercase tracking-tight group-hover:text-purple-400 transition-colors">{member.name}</div>
+                              <div className="text-[8px] font-bold text-slate-500 uppercase tracking-[0.2em]">{member.role}</div>
+                            </div>
                           </div>
-                          <div>
-                            <div className="text-sm font-black text-white uppercase tracking-tight group-hover:text-purple-400 transition-colors">{member.name}</div>
-                            <div className="text-[8px] font-bold text-slate-500 uppercase tracking-[0.2em]">{member.role}</div>
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <span className="text-sm font-bold text-white tabular-nums">{memberAssets.length + memberReviews.length}</span>
+                          <span className="text-[8px] font-bold text-slate-600 uppercase ml-2">Total</span>
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <div className="flex items-center justify-center gap-3">
+                            <div className="text-center">
+                              <div className="text-sm font-bold text-blue-400 tabular-nums">{active}</div>
+                              <div className="text-[7px] font-black text-slate-600 uppercase">Active</div>
+                            </div>
+                            <div className="w-px h-4 bg-white/5"></div>
+                            <div className="text-center">
+                              <div className="text-sm font-bold text-emerald-400 tabular-nums">{done}</div>
+                              <div className="text-[7px] font-black text-slate-600 uppercase">Done</div>
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-5 text-center">
-                        <span className="text-sm font-bold text-white tabular-nums">{memberAssets.length + memberReviews.length}</span>
-                        <span className="text-[8px] font-bold text-slate-600 uppercase ml-2">Total</span>
-                      </td>
-                      <td className="px-6 py-5 max-w-[200px]">
-                        <div className="flex flex-wrap gap-1 justify-center">
-                          {uniqueInvolvedAssets.length === 0 ? (
-                            <span className="text-[8px] text-slate-700 font-bold uppercase italic">None</span>
-                          ) : (
-                            uniqueInvolvedAssets.map(asset => (
-                              <Link 
-                                key={asset.id} 
-                                href={`/assets/${asset.id}`}
-                                className={`text-[7px] font-black px-1.5 py-0.5 rounded-md border transition-all hover:scale-105 ${
-                                  asset.status === 'Approved' ? 'text-emerald-500 border-emerald-500/20 bg-emerald-500/5' :
-                                  asset.status === 'Final Review' ? 'text-orange-500 border-orange-500/20 bg-orange-500/5' :
-                                  'text-slate-400 border-white/10 bg-white/5'
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <span className="text-sm font-bold text-slate-300 tabular-nums">{memberOps.length}</span>
+                          <span className="text-[8px] font-bold text-slate-600 uppercase ml-2">Ops</span>
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                            <span className="text-[10px] font-black text-emerald-500 tabular-nums">{onTime}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/20">
+                            <span className="text-[10px] font-black text-red-500 tabular-nums">{delayed}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-500/10 border border-orange-500/20">
+                            <span className="text-[10px] font-black text-orange-500 tabular-nums">{reworks}</span>
+                          </div>
+                        </td>
+                        <td className="px-8 py-5 text-right">
+                          <div className="flex flex-col items-end">
+                            <div className={`text-lg font-black tabular-nums ${
+                              efficiency >= 85 ? 'text-emerald-500' : efficiency >= 60 ? 'text-yellow-500' : 'text-red-500'
+                            }`}>
+                              {efficiency}%
+                            </div>
+                            <div className="w-24 h-1 bg-white/5 rounded-full overflow-hidden mt-1">
+                              <motion.div 
+                                initial={{ width: 0 }}
+                                animate={{ width: `${efficiency}%` }}
+                                className={`h-full ${
+                                  efficiency >= 85 ? 'bg-emerald-500' : efficiency >= 60 ? 'bg-yellow-500' : 'bg-red-500'
                                 }`}
-                                title={`${asset.name} (${asset.status})`}
-                              >
-                                {asset.name}
-                              </Link>
-                            ))
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-5 text-center">
-                        <div className="flex items-center justify-center gap-3">
-                          <div className="text-center">
-                            <div className="text-sm font-bold text-blue-400 tabular-nums">{active}</div>
-                            <div className="text-[7px] font-black text-slate-600 uppercase">Active</div>
+                              />
+                            </div>
                           </div>
-                          <div className="w-px h-4 bg-white/5"></div>
-                          <div className="text-center">
-                            <div className="text-sm font-bold text-emerald-400 tabular-nums">{done}</div>
-                            <div className="text-[7px] font-black text-slate-600 uppercase">Done</div>
+                        </td>
+                      </tr>
+                      {/* Assets Involvement Sub-row */}
+                      <tr className="bg-white/[0.01]">
+                        <td colSpan={8} className="px-8 py-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest mr-2">Lifetime Involvement:</span>
+                            {uniqueInvolvedAssets.length === 0 ? (
+                              <span className="text-[8px] text-slate-700 font-bold uppercase italic">No records detected</span>
+                            ) : (
+                              uniqueInvolvedAssets.map(asset => (
+                                <Link 
+                                  key={asset.id} 
+                                  href={`/assets/${asset.id}`}
+                                  className={`text-[7px] font-black px-2 py-0.5 rounded-md border transition-all hover:border-blue-500/50 ${
+                                    asset.status === 'Approved' ? 'text-emerald-500 border-emerald-500/20 bg-emerald-500/5' :
+                                    asset.status === 'Final Review' ? 'text-orange-500 border-orange-500/20 bg-orange-500/5' :
+                                    'text-slate-400 border-white/5 bg-white/5'
+                                  }`}
+                                >
+                                  {asset.name}
+                                </Link>
+                              ))
+                            )}
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-5 text-center">
-                        <span className="text-sm font-bold text-slate-300 tabular-nums">{memberOps.length}</span>
-                        <span className="text-[8px] font-bold text-slate-600 uppercase ml-2">Ops</span>
-                      </td>
-                      <td className="px-6 py-5 text-center">
-                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                          <span className="text-[10px] font-black text-emerald-500 tabular-nums">{onTime}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-5 text-center">
-                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/20">
-                          <span className="text-[10px] font-black text-red-500 tabular-nums">{delayed}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-5 text-center">
-                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-500/10 border border-orange-500/20">
-                          <span className="text-[10px] font-black text-orange-500 tabular-nums">{reworks}</span>
-                        </div>
-                      </td>
-                      <td className="px-8 py-5 text-right">
-                        <div className="flex flex-col items-end">
-                          <div className={`text-lg font-black tabular-nums ${
-                            efficiency >= 85 ? 'text-emerald-500' : efficiency >= 60 ? 'text-yellow-500' : 'text-red-500'
-                          }`}>
-                            {efficiency}%
-                          </div>
-                          <div className="w-24 h-1 bg-white/5 rounded-full overflow-hidden mt-1">
-                            <motion.div 
-                              initial={{ width: 0 }}
-                              animate={{ width: `${efficiency}%` }}
-                              className={`h-full ${
-                                efficiency >= 85 ? 'bg-emerald-500' : efficiency >= 60 ? 'bg-yellow-500' : 'bg-red-500'
-                              }`}
-                            />
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
+                        </td>
+                      </tr>
+                    </Fragment>
                   );
                 })}
               </tbody>
