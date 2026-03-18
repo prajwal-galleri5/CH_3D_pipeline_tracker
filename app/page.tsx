@@ -24,20 +24,40 @@ export default function Home() {
 
       const q = query(collection(db, "assets"), orderBy("updatedAt", "desc"));
       const querySnapshot = await getDocs(q);
-      const fetched: Asset[] = [];
+      const allFetched: Asset[] = [];
       querySnapshot.forEach((doc) => {
-        const data = doc.data() as Asset;
-        if (data.assignedArtists && data.assignedArtists.length > 0) {
-          fetched.push({ ...data, id: doc.id } as Asset);
-        }
+        allFetched.push({ ...doc.data(), id: doc.id } as Asset);
       });
-      setAssets(fetched);
+      
+      const active = allFetched.filter(a => a.assignedArtists && a.assignedArtists.length > 0);
+      setAssets(active);
     } catch (err: any) {
       console.error("Error fetching assets:", err);
       setError(err.message || "Could not connect to database.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const mainAssets = assets.filter(a => !a.parentId);
+  const variations = assets.filter(a => a.parentId);
+
+  const groupedAssets: Asset[] = [];
+  mainAssets.forEach(main => {
+    groupedAssets.push(main);
+    const vars = variations.filter(v => v.parentId === main.id);
+    groupedAssets.push(...vars);
+  });
+  
+  variations.forEach(v => {
+    if (!mainAssets.some(m => m.id === v.parentId)) {
+      groupedAssets.push(v);
+    }
+  });
+
+  const getParentName = (parentId: string) => {
+    const parent = assets.find(a => a.id === parentId);
+    return parent ? parent.name : "Parent";
   };
 
   const handleDeleteAsset = async (id: string, name: string, e: React.MouseEvent) => {
@@ -174,13 +194,13 @@ export default function Home() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {assets.map((asset) => {
+                  {groupedAssets.map((asset) => {
                     const progress = calculateProgress(asset);
                     const outcome = getLifecycleOutcome(asset);
                     return (
                       <tr 
                         key={asset.id} 
-                        className="group cursor-pointer hover:bg-white/[0.02] transition-all relative"
+                        className={`group cursor-pointer hover:bg-white/[0.02] transition-all relative ${asset.parentId ? 'bg-white/[0.01]' : ''}`}
                         style={{ 
                           backgroundImage: `linear-gradient(to right, rgba(16, 185, 129, 0.04) ${progress}%, transparent ${progress}%)`
                         }}
@@ -188,6 +208,9 @@ export default function Home() {
                       >
                         <td className="px-6 py-5 sticky left-0 bg-slate-900/95 backdrop-blur-md group-hover:bg-slate-800 transition-colors z-10 border-r border-white/5">
                           <div className="flex items-center gap-4">
+                            {asset.parentId && (
+                              <div className="w-3 h-3 border-l border-b border-white/20 rounded-bl-sm ml-2 flex-shrink-0" />
+                            )}
                             <button 
                               onClick={(e) => handleDeleteAsset(asset.id, asset.name, e)}
                               className="p-1.5 text-slate-700 hover:text-red-500 rounded-md transition-all opacity-0 group-hover:opacity-100"
@@ -195,13 +218,18 @@ export default function Home() {
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                             <div className="min-w-0" title={asset.name}>
-                              <div className="font-black text-white text-[11px] uppercase tracking-tight truncate group-hover:text-orange-400 transition-colors">
+                              <div className={`font-black text-white text-[11px] uppercase tracking-tight truncate group-hover:text-orange-400 transition-colors ${asset.parentId ? 'text-slate-400' : ''}`}>
                                 {asset.name}
                               </div>
-                              <div className="flex items-center gap-2 mt-1">
+                              <div className="flex flex-wrap items-center gap-2 mt-1">
                                 <span className={`text-[7px] font-black px-1.5 py-0.5 rounded border uppercase tracking-widest ${getStatusStyle(asset.status)}`}>
                                   {asset.status}
                                 </span>
+                                {asset.parentId && (
+                                  <span className="text-[6px] font-black text-slate-600 uppercase tracking-widest border border-white/5 px-1 rounded-sm whitespace-nowrap">
+                                    Variation of {getParentName(asset.parentId)}
+                                  </span>
+                                )}
                                 <span className="text-[7px] font-bold text-slate-600 uppercase tabular-nums">{Math.round(progress)}%</span>
                               </div>
                             </div>

@@ -157,7 +157,9 @@ export function AddAssetModal({
                   <select name="assetId" required value={formData.assetId} onChange={handleChange} className="w-full pl-10 pr-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl text-white font-bold focus:border-orange-500/50 outline-none transition appearance-none">
                     <option value="" className="bg-slate-900">Select Ready Asset</option>
                     {library.map(a => (
-                      <option key={a.id} value={a.id} className="bg-slate-900">[{a.type}] {a.name}</option>
+                      <option key={a.id} value={a.id} className="bg-slate-900">
+                        {a.parentId ? `[Variation] ` : `[${a.type}] `} {a.name}
+                      </option>
                     ))}
                   </select>
                 </div>
