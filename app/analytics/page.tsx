@@ -93,6 +93,8 @@ export default function Analytics() {
       Secondary: [],
       Inhouse: []
     };
+    
+    // Step 1: Assign assets to their respective priority/studio groups
     assets.forEach(a => {
       if (a.studio === 'Inhouse') {
         groups.Inhouse.push(a);
@@ -102,7 +104,31 @@ export default function Analytics() {
         groups.Secondary.push(a);
       }
     });
-    return groups;
+
+    // Step 2: For each group, re-order to place variations immediately after their parents
+    const sortedGroups: Record<string, Asset[]> = {};
+    Object.entries(groups).forEach(([key, list]) => {
+      const mainAssets = list.filter(a => !a.parentId);
+      const variations = list.filter(a => a.parentId);
+      
+      const ordered: Asset[] = [];
+      mainAssets.sort((a, b) => calculateProgress(b) - calculateProgress(a)).forEach(main => {
+        ordered.push(main);
+        const children = variations.filter(v => v.parentId === main.id);
+        ordered.push(...children.sort((a, b) => calculateProgress(b) - calculateProgress(a)));
+      });
+      
+      // Add variations whose parents might be in a different group or missing
+      variations.forEach(v => {
+        if (!ordered.some(o => o.id === v.id)) {
+          ordered.push(v);
+        }
+      });
+      
+      sortedGroups[key] = ordered;
+    });
+
+    return sortedGroups;
   };
 
   const getEfficiencyData = () => {
@@ -610,21 +636,34 @@ export default function Analytics() {
                         </td>
                       </tr>
                     ) : (
-                      groupAssets.sort((a, b) => calculateProgress(b) - calculateProgress(a)).map((asset) => {
+                      groupAssets.map((asset) => {
                         const progress = calculateProgress(asset);
                         return (
                           <tr 
                             key={asset.id} 
-                            className="group hover:bg-white/[0.02] transition-all cursor-pointer"
+                            className={`group hover:bg-white/[0.02] transition-all cursor-pointer ${asset.parentId ? 'bg-white/[0.01]' : ''}`}
                             onClick={() => window.location.href = `/assets/${asset.id}`}
                           >
                             <td className="px-8 py-5">
-                              <div className="flex flex-col">
-                                <span className="text-sm font-black text-white uppercase tracking-tight group-hover:text-orange-400 transition-colors">{asset.name}</span>
-                                <div className="flex items-center gap-2 mt-0.5">
-                                  <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">{asset.type}</span>
-                                  <span className="w-1 h-1 rounded-full bg-slate-800"></span>
-                                  <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">{asset.studio}</span>
+                              <div className="flex items-center gap-3">
+                                {asset.parentId && (
+                                  <div className="w-3 h-3 border-l border-b border-white/20 rounded-bl-sm ml-2 flex-shrink-0" />
+                                )}
+                                <div className="flex flex-col min-w-0">
+                                  <span className={`text-sm font-black text-white uppercase tracking-tight group-hover:text-orange-400 transition-colors ${asset.parentId ? 'text-slate-400' : ''}`}>
+                                    {asset.name}
+                                  </span>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">{asset.type}</span>
+                                    {asset.parentId && (
+                                      <>
+                                        <span className="w-1 h-1 rounded-full bg-slate-800"></span>
+                                        <span className="text-[7px] font-black text-slate-600 uppercase">Variation</span>
+                                      </>
+                                    )}
+                                    <span className="w-1 h-1 rounded-full bg-slate-800"></span>
+                                    <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">{asset.studio}</span>
+                                  </div>
                                 </div>
                               </div>
                             </td>
