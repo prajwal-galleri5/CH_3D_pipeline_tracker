@@ -15,6 +15,8 @@ export default function AssetDetails() {
   const assetId = params.id as string;
 
   const [asset, setAsset] = useState<Asset | null>(null);
+  const [parentAsset, setParentAsset] = useState<Asset | null>(null);
+  const [variations, setVariations] = useState<Asset[]>([]);
   const [versions, setVersions] = useState<Version[]>([]);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -22,6 +24,10 @@ export default function AssetDetails() {
 
   // Team State
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+
+  // Variation Management
+  const [isAddVariationModalOpen, setIsAddVariationModalOpen] = useState(false);
+  const [newVariationName, setNewVariationName] = useState("");
 
   // Version Management State
   const [showVersionForm, setShowVersionForm] = useState(false);
@@ -45,12 +51,28 @@ export default function AssetDetails() {
       const docRef = doc(db, "assets", assetId);
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
-        const data = { id: docSnap.id, ...docSnap.data() } as Asset;
+        const data = { ...docSnap.data(), id: docSnap.id } as Asset;
         setAsset(data);
         setEditData({
           ...data,
           assignedArtists: (data.assignedArtists || []) as any
         });
+
+        // Fetch parent if it exists
+        if (data.parentId) {
+          const parentRef = doc(db, "assets", data.parentId);
+          const parentSnap = await getDoc(parentRef);
+          if (parentSnap.exists()) {
+            setParentAsset({ ...parentSnap.data(), id: parentSnap.id } as Asset);
+          }
+        }
+
+        // Fetch variations
+        const qv_vars = query(collection(db, "assets"), where("parentId", "==", assetId));
+        const varsSnap = await getDocs(qv_vars);
+        const fetchedVars: Asset[] = [];
+        varsSnap.forEach(d => fetchedVars.push({ ...d.data(), id: d.id } as Asset));
+        setVariations(fetchedVars);
       }
 
       // Fetch versions
@@ -58,7 +80,7 @@ export default function AssetDetails() {
       const versionsSnap = await getDocs(qv);
       const fetchedVersions: Version[] = [];
       versionsSnap.forEach((d) => {
-        fetchedVersions.push({ id: d.id, ...d.data() } as Version);
+        fetchedVersions.push({ ...d.data(), id: d.id } as Version);
       });
       fetchedVersions.sort((a, b) => b.createdAt - a.createdAt);
       setVersions(fetchedVersions);
@@ -75,6 +97,32 @@ export default function AssetDetails() {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAddVariation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newVariationName || !asset) return;
+    
+    try {
+      const newVar: any = {
+        name: newVariationName.trim(),
+        type: asset.type,
+        masterDriveLink: asset.masterDriveLink || "",
+        isReady: false,
+        status: "Not Started",
+        assignedArtists: [],
+        parentId: asset.id,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      
+      const docRef = await addDoc(collection(db, "assets"), newVar);
+      setNewVariationName("");
+      setIsAddVariationModalOpen(false);
+      window.location.href = `/assets/${docRef.id}`;
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -960,10 +1008,61 @@ export default function AssetDetails() {
       <div className="cinematic-glass rounded-3xl p-6 mb-8 relative overflow-hidden border-white/5 shadow-2xl">
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-[8px] font-bold text-orange-500 uppercase tracking-widest">{asset.type}</span>
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+              {parentAsset && (
+                <Link 
+                  href={`/assets/${parentAsset.id}`}
+                  className="flex items-center gap-2 px-3 py-1 bg-white/5 hover:bg-white/10 rounded-full border border-white/10 transition-all group"
+                >
+                  <ArrowLeft className="w-2.5 h-2.5 text-slate-500 group-hover:text-orange-500" />
+                  <span className="text-[8px] font-black text-slate-500 group-hover:text-white uppercase tracking-widest">
+                    Parent: {parentAsset.name}
+                  </span>
+                </Link>
+              )}
+              {asset.type && (
+                <span className="text-[8px] font-black text-orange-500 bg-orange-500/10 px-3 py-1 rounded-full border border-orange-500/20 uppercase tracking-widest">
+                  {asset.type} {asset.parentId ? 'Variation' : 'Main Asset'}
+                </span>
+              )}
             </div>
-            <h1 className="text-3xl font-bold text-white tracking-tight uppercase mb-3">{asset.name}</h1>
+            
+            <div className="flex flex-col gap-1 mb-6">
+              <h1 className="text-4xl font-black text-white tracking-tight uppercase leading-none">{asset.name}</h1>
+              <p className="text-[9px] font-bold text-slate-600 uppercase tracking-[0.3em] ml-1">Asset ID: {asset.id.slice(0, 12)}</p>
+            </div>
+
+            <div className="flex flex-wrap gap-3 mb-8">
+              {/* Variations Quick List */}
+              {variations.length > 0 && (
+                <div className="flex items-center gap-2 pr-4 border-r border-white/10">
+                  <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Variations:</span>
+                  <div className="flex -space-x-2">
+                    {variations.map(v => (
+                      <Link 
+                        key={v.id}
+                        href={`/assets/${v.id}`}
+                        title={v.name}
+                        className="w-6 h-6 rounded-full bg-slate-800 border-2 border-slate-900 flex items-center justify-center text-[8px] font-black text-white hover:z-10 hover:border-orange-500 transition-all"
+                      >
+                        {v.name[0]}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!asset.parentId && (
+                <button 
+                  onClick={() => setIsAddVariationModalOpen(true)}
+                  className="flex items-center gap-2 px-4 py-1.5 bg-white/5 hover:bg-orange-600/20 rounded-full border border-white/10 hover:border-orange-500/50 transition-all group"
+                >
+                  <Plus className="w-3 h-3 text-slate-500 group-hover:text-orange-500" />
+                  <span className="text-[9px] font-black text-slate-500 group-hover:text-white uppercase tracking-widest">Add Variation</span>
+                </button>
+              )}
+            </div>
+
             <div className="flex flex-wrap gap-2">
               <div className="inline-flex items-center gap-2 px-2 py-0.5 bg-white/5 rounded-full border border-white/10">
                 <div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></div>
@@ -1724,6 +1823,67 @@ export default function AssetDetails() {
               );
             })()}
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Add Variation Modal */}
+      <AnimatePresence>
+        {isAddVariationModalOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-xl p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              className="cinematic-glass rounded-[32px] border border-white/10 shadow-2xl w-full max-w-md p-8 relative overflow-hidden"
+            >
+              <div className="flex justify-between items-center mb-8">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-orange-600 rounded-xl flex items-center justify-center shadow-lg shadow-orange-900/20">
+                    <Plus className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold text-white uppercase tracking-tight">Create Variation</h2>
+                    <p className="text-slate-500 text-[9px] font-bold tracking-[0.2em] uppercase">For {asset.name}</p>
+                  </div>
+                </div>
+              </div>
+
+              <form onSubmit={handleAddVariation} className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Variation Name</label>
+                  <input 
+                    type="text" 
+                    required 
+                    value={newVariationName} 
+                    onChange={(e) => setNewVariationName(e.target.value)} 
+                    className="w-full px-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl text-white font-bold focus:border-orange-500 outline-none transition uppercase tracking-widest" 
+                    placeholder={`E.G. ${asset.name}_V1`} 
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-6">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddVariationModalOpen(false)}
+                    className="flex-1 py-4 bg-white/5 text-slate-500 font-black uppercase tracking-widest text-xs rounded-2xl hover:bg-white/10 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-[2] py-4 bg-orange-600 text-white font-black uppercase tracking-widest text-xs rounded-2xl shadow-xl shadow-orange-900/20 transition-all"
+                  >
+                    Create Variation
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </motion.div>
