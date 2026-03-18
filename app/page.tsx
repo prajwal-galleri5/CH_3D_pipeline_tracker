@@ -28,7 +28,7 @@ export default function Home() {
       querySnapshot.forEach((doc) => {
         const data = doc.data() as Asset;
         if (data.assignedArtists && data.assignedArtists.length > 0) {
-          fetched.push({ id: doc.id, ...data } as Asset);
+          fetched.push({ ...data, id: doc.id } as Asset);
         }
       });
       setAssets(fetched);
