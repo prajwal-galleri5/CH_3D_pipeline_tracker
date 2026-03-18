@@ -286,7 +286,7 @@ export default function AssetDetails() {
       // Slack Notification for newly added artists
       const oldArtists = asset.assignedArtists || [];
       const newArtists = updatePayload.assignedArtists || [];
-      const addedArtists = newArtists.filter(a => !oldArtists.includes(a));
+      const addedArtists = newArtists.filter((a: string) => !oldArtists.includes(a));
       
       if (addedArtists.length > 0) {
         await notifyArtistsByName(
@@ -484,7 +484,7 @@ export default function AssetDetails() {
   };
 
   const handleUpdateVersion = async () => {
-    if (!editingVersionId) return;
+    if (!editingVersionId || !asset) return;
     try {
       const version = versions.find(v => v.id === editingVersionId);
       if (!version) return;
@@ -1080,11 +1080,11 @@ export default function AssetDetails() {
 
                 // Built-in field mapping
                 let exp = "";
-                let uploaded = firstV?.createdAt;
-                let reviewed = latestV?.reviewedAt;
-                let notified = undefined;
-                let reviewedModel = undefined;
-                let reviewedRig = undefined;
+                let uploaded: number | undefined = firstV?.createdAt;
+                let reviewed: number | undefined = latestV?.reviewedAt;
+                let notified: number | undefined = undefined;
+                let reviewedModel: number | undefined = undefined;
+                let reviewedRig: number | undefined = undefined;
 
                 if (stageName === "Base input") {
                   exp = asset.inputExpectedDate || "";
@@ -1451,7 +1451,7 @@ export default function AssetDetails() {
                                   </span>
                                 )}
                               </div>
-                              {version.reviewNoteModel && <p className="text-[9px] text-slate-300 italic">"{version.reviewNoteModel}"</p>}
+                              {version.reviewNoteModel && <p className="text-[9px] text-slate-300 italic">&quot;{version.reviewNoteModel}&quot;</p>}
                               {version.reviewNoteLinkModel && (
                                 <a href={version.reviewNoteLinkModel} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300 text-[8px] font-bold uppercase">
                                   <FileText className="w-2 h-2" /> Link
@@ -1474,7 +1474,7 @@ export default function AssetDetails() {
                                   </span>
                                 )}
                               </div>
-                              {version.reviewNoteRig && <p className="text-[9px] text-slate-300 italic">"{version.reviewNoteRig}"</p>}
+                              {version.reviewNoteRig && <p className="text-[9px] text-slate-300 italic">&quot;{version.reviewNoteRig}&quot;</p>}
                               {version.reviewNoteLinkRig && (
                                 <a href={version.reviewNoteLinkRig} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300 text-[8px] font-bold uppercase">
                                   <FileText className="w-2 h-2" /> Link
@@ -1493,7 +1493,7 @@ export default function AssetDetails() {
                             {(version.reviewNote || version.reviewNoteLink) && (
                               <div className="mb-1 space-y-1">
                                 {version.reviewNote && (
-                                  <p className="text-[10px] text-slate-300 leading-tight italic break-words">"{version.reviewNote}"</p>
+                                  <p className="text-[10px] text-slate-300 leading-tight italic break-words">&quot;{version.reviewNote}&quot;</p>
                                 )}
                                 {version.reviewNoteLink && (
                                   <a href={version.reviewNoteLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-blue-400 hover:text-blue-300 font-bold uppercase text-[9px] tracking-widest">

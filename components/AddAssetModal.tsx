@@ -45,7 +45,7 @@ export function AddAssetModal({
         const data = d.data() as Asset;
         // Only show assets not yet in production (no artists assigned)
         if (!data.assignedArtists || data.assignedArtists.length === 0) {
-          lib.push({ id: d.id, ...data });
+          lib.push({ ...data, id: d.id });
         }
       });
       setLibrary(lib);

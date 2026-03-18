@@ -30,7 +30,7 @@ export default function TeamManagement() {
       const querySnapshot = await getDocs(q);
       const fetched: TeamMember[] = [];
       querySnapshot.forEach((doc) => {
-        fetched.push({ id: doc.id, ...doc.data() } as TeamMember);
+        fetched.push({ ...doc.data(), id: doc.id } as TeamMember);
       });
       setMembers(fetched);
     } catch (err) {
