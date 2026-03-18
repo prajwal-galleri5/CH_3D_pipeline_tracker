@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import { collection, getDocs, orderBy, query, where, deleteDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Asset, Version } from "@/types";
-import { Plus, Boxes, CheckCircle, Trash2 } from "lucide-react";
+import { Plus, Boxes, CheckCircle, Trash2, ChevronRight } from "lucide-react";
 import { AddAssetModal } from "@/components/AddAssetModal";
 import { motion } from "framer-motion";
 
@@ -13,6 +13,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [error, setError] = useState("");
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const fetchAssets = async () => {
     setLoading(true);
@@ -42,22 +43,19 @@ export default function Home() {
   const mainAssets = assets.filter(a => !a.parentId);
   const variations = assets.filter(a => a.parentId);
 
-  const groupedAssets: Asset[] = [];
-  mainAssets.forEach(main => {
-    groupedAssets.push(main);
-    const vars = variations.filter(v => v.parentId === main.id);
-    groupedAssets.push(...vars);
-  });
-  
-  variations.forEach(v => {
-    if (!mainAssets.some(m => m.id === v.parentId)) {
-      groupedAssets.push(v);
-    }
-  });
-
   const getParentName = (parentId: string) => {
     const parent = assets.find(a => a.id === parentId);
     return parent ? parent.name : "Parent";
+  };
+
+  const toggleExpand = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const handleDeleteAsset = async (id: string, name: string, e: React.MouseEvent) => {
@@ -138,6 +136,110 @@ export default function Home() {
     }
   };
 
+  const renderAssetRow = (asset: Asset) => {
+    const progress = calculateProgress(asset);
+    const outcome = getLifecycleOutcome(asset);
+    const children = variations.filter(v => v.parentId === asset.id);
+    const hasVariations = children.length > 0;
+    const isExpanded = expandedRows.has(asset.id);
+
+    return (
+      <Fragment key={asset.id}>
+        <tr 
+          className={`group cursor-pointer hover:bg-white/[0.02] transition-all relative ${asset.parentId ? 'bg-white/[0.01]' : ''}`}
+          style={{ 
+            backgroundImage: `linear-gradient(to right, rgba(16, 185, 129, 0.04) ${progress}%, transparent ${progress}%)`
+          }}
+          onClick={() => window.location.href = `/assets/${asset.id}`}
+        >
+          <td className="px-6 py-5 sticky left-0 bg-slate-900/95 backdrop-blur-md group-hover:bg-slate-800 transition-colors z-10 border-r border-white/5">
+            <div className="flex items-center gap-4">
+              {!asset.parentId && hasVariations && (
+                <button 
+                  onClick={(e) => toggleExpand(asset.id, e)}
+                  className="p-1 hover:bg-white/10 rounded transition-colors text-slate-500"
+                >
+                  <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                </button>
+              )}
+              {asset.parentId && (
+                <div className="w-3 h-3 border-l border-b border-white/20 rounded-bl-sm ml-2 flex-shrink-0" />
+              )}
+              <button 
+                onClick={(e) => handleDeleteAsset(asset.id, asset.name, e)}
+                className="p-1.5 text-slate-700 hover:text-red-500 rounded-md transition-all opacity-0 group-hover:opacity-100"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+              <div className="min-w-0" title={asset.name}>
+                <div className={`font-black text-white text-[11px] uppercase tracking-tight truncate group-hover:text-orange-400 transition-colors ${asset.parentId ? 'text-slate-400' : ''}`}>
+                  {asset.name}
+                </div>
+                <div className="flex flex-wrap items-center gap-2 mt-1">
+                  <span className={`text-[7px] font-black px-1.5 py-0.5 rounded border uppercase tracking-widest ${getStatusStyle(asset.status)}`}>
+                    {asset.status}
+                  </span>
+                  {asset.parentId && (
+                    <span className="text-[6px] font-black text-slate-600 uppercase tracking-widest border border-white/5 px-1 rounded-sm whitespace-nowrap">
+                      Variation of {getParentName(asset.parentId)}
+                    </span>
+                  )}
+                  <span className="text-[7px] font-bold text-slate-600 uppercase tabular-nums">{Math.round(progress)}%</span>
+                </div>
+              </div>
+            </div>
+          </td>
+
+          <td className="px-6 py-5">
+            <span className="text-[10px] font-bold text-slate-400 uppercase truncate block">{asset.studio || "—"}</span>
+          </td>
+
+          <td className="px-6 py-5">
+            <span className="text-[10px] font-bold text-slate-300 uppercase truncate block">{asset.assignedArtists?.[0] || "—"}</span>
+          </td>
+
+          {/* Milestones */}
+          {[
+            { key: 'inputCompletedDate', label: 'Done', exp: asset.inputExpectedDate, check: asset.bmApproved },
+            { key: 'firstPassReceived', label: 'Recv', exp: asset.firstPassExpectedDate, check: asset.fpApproved },
+            { key: 'reviewed', label: 'Rev', exp: asset.greyScaleExpectedDate, check: asset.gsApproved },
+            { key: 'finalVersionReceivedDate', label: 'Recv', exp: asset.finalVersionExpectedDate, check: asset.finalApproved }
+          ].map((m, i) => {
+            const isUploaded = (asset as any)[m.key] === 'Yes' || !!(asset as any)[m.key];
+            const isApproved = m.check;
+            
+            return (
+              <td key={i} className="px-6 py-5 text-center">
+                <div className="flex flex-col items-center gap-1">
+                  {isUploaded ? (
+                    <CheckCircle className={`w-4 h-4 ${isApproved ? 'text-emerald-500 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'text-orange-500'} transition-all`} />
+                  ) : (
+                    <span className="text-[9px] font-mono text-slate-600 italic">
+                      {m.exp ? m.exp.split('-').slice(1).join('/') : "—"}
+                    </span>
+                  )}
+                  <span className={`text-[7px] font-black uppercase tracking-tighter ${isApproved ? 'text-emerald-600' : isUploaded ? 'text-orange-600' : 'text-slate-500'}`}>
+                    {isApproved ? "Approved" : isUploaded ? m.label : "Awaiting"}
+                  </span>
+                </div>
+              </td>
+            );
+          })}
+
+          {/* Outcome */}
+          <td className="px-6 py-5 text-center">
+            <div className={`inline-flex px-3 py-1 rounded-full border border-white/5 ${outcome.bg}`}>
+              <span className={`text-[9px] font-black uppercase tracking-widest ${outcome.color}`}>
+                {outcome.text}
+              </span>
+            </div>
+          </td>
+        </tr>
+        {isExpanded && children.map(v => renderAssetRow(v))}
+      </Fragment>
+    );
+  };
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-full mx-auto px-4 py-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6 max-w-7xl mx-auto">
@@ -194,95 +296,7 @@ export default function Home() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {groupedAssets.map((asset) => {
-                    const progress = calculateProgress(asset);
-                    const outcome = getLifecycleOutcome(asset);
-                    return (
-                      <tr 
-                        key={asset.id} 
-                        className={`group cursor-pointer hover:bg-white/[0.02] transition-all relative ${asset.parentId ? 'bg-white/[0.01]' : ''}`}
-                        style={{ 
-                          backgroundImage: `linear-gradient(to right, rgba(16, 185, 129, 0.04) ${progress}%, transparent ${progress}%)`
-                        }}
-                        onClick={() => window.location.href = `/assets/${asset.id}`}
-                      >
-                        <td className="px-6 py-5 sticky left-0 bg-slate-900/95 backdrop-blur-md group-hover:bg-slate-800 transition-colors z-10 border-r border-white/5">
-                          <div className="flex items-center gap-4">
-                            {asset.parentId && (
-                              <div className="w-3 h-3 border-l border-b border-white/20 rounded-bl-sm ml-2 flex-shrink-0" />
-                            )}
-                            <button 
-                              onClick={(e) => handleDeleteAsset(asset.id, asset.name, e)}
-                              className="p-1.5 text-slate-700 hover:text-red-500 rounded-md transition-all opacity-0 group-hover:opacity-100"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                            <div className="min-w-0" title={asset.name}>
-                              <div className={`font-black text-white text-[11px] uppercase tracking-tight truncate group-hover:text-orange-400 transition-colors ${asset.parentId ? 'text-slate-400' : ''}`}>
-                                {asset.name}
-                              </div>
-                              <div className="flex flex-wrap items-center gap-2 mt-1">
-                                <span className={`text-[7px] font-black px-1.5 py-0.5 rounded border uppercase tracking-widest ${getStatusStyle(asset.status)}`}>
-                                  {asset.status}
-                                </span>
-                                {asset.parentId && (
-                                  <span className="text-[6px] font-black text-slate-600 uppercase tracking-widest border border-white/5 px-1 rounded-sm whitespace-nowrap">
-                                    Variation of {getParentName(asset.parentId)}
-                                  </span>
-                                )}
-                                <span className="text-[7px] font-bold text-slate-600 uppercase tabular-nums">{Math.round(progress)}%</span>
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-
-                        <td className="px-6 py-5">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase truncate block">{asset.studio || "—"}</span>
-                        </td>
-
-                        <td className="px-6 py-5">
-                          <span className="text-[10px] font-bold text-slate-300 uppercase truncate block">{asset.assignedArtists?.[0] || "—"}</span>
-                        </td>
-
-                        {/* Milestones */}
-                        {[
-                          { key: 'inputCompletedDate', label: 'Done', exp: asset.inputExpectedDate, check: asset.bmApproved },
-                          { key: 'firstPassReceived', label: 'Recv', exp: asset.firstPassExpectedDate, check: asset.fpApproved },
-                          { key: 'reviewed', label: 'Rev', exp: asset.greyScaleExpectedDate, check: asset.gsApproved },
-                          { key: 'finalVersionReceivedDate', label: 'Recv', exp: asset.finalVersionExpectedDate, check: asset.finalApproved }
-                        ].map((m, i) => {
-                          const isUploaded = (asset as any)[m.key] === 'Yes' || !!(asset as any)[m.key];
-                          const isApproved = m.check;
-                          
-                          return (
-                            <td key={i} className="px-6 py-5 text-center">
-                              <div className="flex flex-col items-center gap-1">
-                                {isUploaded ? (
-                                  <CheckCircle className={`w-4 h-4 ${isApproved ? 'text-emerald-500 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'text-orange-500'} transition-all`} />
-                                ) : (
-                                  <span className="text-[9px] font-mono text-slate-600 italic">
-                                    {m.exp ? m.exp.split('-').slice(1).join('/') : "—"}
-                                  </span>
-                                )}
-                                <span className={`text-[7px] font-black uppercase tracking-tighter ${isApproved ? 'text-emerald-600' : isUploaded ? 'text-orange-600' : 'text-slate-500'}`}>
-                                  {isApproved ? "Approved" : isUploaded ? m.label : "Awaiting"}
-                                </span>
-                              </div>
-                            </td>
-                          );
-                        })}
-
-                        {/* Outcome */}
-                        <td className="px-6 py-5 text-center">
-                          <div className={`inline-flex px-3 py-1 rounded-full border border-white/5 ${outcome.bg}`}>
-                            <span className={`text-[9px] font-black uppercase tracking-widest ${outcome.color}`}>
-                              {outcome.text}
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {mainAssets.map((asset) => renderAssetRow(asset))}
                 </tbody>
               </table>
             </div>

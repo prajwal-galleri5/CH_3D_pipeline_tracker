@@ -23,6 +23,7 @@ export default function Analytics() {
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [ops, setOps] = useState<DerivedOp[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const fetchData = async () => {
@@ -94,7 +95,6 @@ export default function Analytics() {
       Inhouse: []
     };
     
-    // Step 1: Assign assets to their respective priority/studio groups
     assets.forEach(a => {
       if (a.studio === 'Inhouse') {
         groups.Inhouse.push(a);
@@ -105,30 +105,12 @@ export default function Analytics() {
       }
     });
 
-    // Step 2: For each group, re-order to place variations immediately after their parents
-    const sortedGroups: Record<string, Asset[]> = {};
+    const grouped: Record<string, Asset[]> = {};
     Object.entries(groups).forEach(([key, list]) => {
-      const mainAssets = list.filter(a => !a.parentId);
-      const variations = list.filter(a => a.parentId);
-      
-      const ordered: Asset[] = [];
-      mainAssets.sort((a, b) => calculateProgress(b) - calculateProgress(a)).forEach(main => {
-        ordered.push(main);
-        const children = variations.filter(v => v.parentId === main.id);
-        ordered.push(...children.sort((a, b) => calculateProgress(b) - calculateProgress(a)));
-      });
-      
-      // Add variations whose parents might be in a different group or missing
-      variations.forEach(v => {
-        if (!ordered.some(o => o.id === v.id)) {
-          ordered.push(v);
-        }
-      });
-      
-      sortedGroups[key] = ordered;
+      grouped[key] = list.filter(a => !a.parentId).sort((a, b) => calculateProgress(b) - calculateProgress(a));
     });
 
-    return sortedGroups;
+    return grouped;
   };
 
   const getEfficiencyData = () => {
@@ -153,6 +135,16 @@ export default function Analytics() {
     return last14Days.map(day => ({ date: day.split('-').slice(1).join('/'), events: days[day] }));
   };
 
+  const toggleExpand = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const efficiencyRate = ops.filter(o => o.onTime !== 'N/A').length > 0
     ? Math.round((ops.filter(o => o.onTime === true).length / ops.filter(o => o.onTime !== 'N/A').length) * 100)
     : 0;
@@ -173,6 +165,97 @@ export default function Analytics() {
 
   const artistList = Array.from(new Set(assets.flatMap(a => a.assignedArtists || []))).sort();
   const assetGroups = groupAssets();
+
+  const renderProgressionRow = (asset: Asset, groupName: string) => {
+    const progress = calculateProgress(asset);
+    const children = assets.filter(v => v.parentId === asset.id);
+    const hasVariations = children.length > 0;
+    const isExpanded = expandedRows.has(asset.id);
+
+    return (
+      <Fragment key={asset.id}>
+        <tr 
+          className={`group hover:bg-white/[0.02] transition-all cursor-pointer ${asset.parentId ? 'bg-white/[0.01]' : ''}`}
+          onClick={() => window.location.href = `/assets/${asset.id}`}
+        >
+          <td className="px-8 py-5">
+            <div className="flex items-center gap-3">
+              {!asset.parentId && hasVariations && (
+                <button 
+                  onClick={(e) => toggleExpand(asset.id, e)}
+                  className="p-1 hover:bg-white/10 rounded transition-colors text-slate-500"
+                >
+                  <ChevronRight className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                </button>
+              )}
+              {asset.parentId && (
+                <div className="w-3 h-3 border-l border-b border-white/20 rounded-bl-sm ml-2 flex-shrink-0" />
+              )}
+              <div className="flex flex-col min-w-0">
+                <span className={`text-sm font-black text-white uppercase tracking-tight group-hover:text-orange-400 transition-colors ${asset.parentId ? 'text-slate-400' : ''}`}>
+                  {asset.name}
+                </span>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">{asset.type}</span>
+                  {asset.parentId && (
+                    <>
+                      <span className="w-1 h-1 rounded-full bg-slate-800"></span>
+                      <span className="text-[7px] font-black text-slate-600 uppercase">Variation</span>
+                    </>
+                  )}
+                  <span className="w-1 h-1 rounded-full bg-slate-800"></span>
+                  <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">{asset.studio}</span>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td className="px-6 py-5 text-center">
+            <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border ${
+              asset.status === 'Approved' ? 'text-emerald-500 border-emerald-500/20 bg-emerald-500/5' :
+              asset.status === 'Final Review' ? 'text-orange-500 border-orange-500/20 bg-orange-500/5' :
+              'text-slate-400 border-white/5 bg-white/5'
+            }`}>
+              {asset.status}
+            </span>
+          </td>
+          <td className="px-6 py-5">
+            <div className="flex flex-col gap-2">
+              <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden border border-white/5 relative">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${progress}%` }}
+                  className={`h-full absolute top-0 left-0 ${
+                    progress === 100 ? 'bg-emerald-500' : 
+                    groupName === 'Primary' ? 'bg-orange-500' : 'bg-blue-500'
+                  }`}
+                />
+              </div>
+              <div className="flex justify-between gap-1">
+                {['INPUT', '1P', 'TEX', 'FP', 'DONE'].map((m, i) => {
+                  const approved = [asset.bmApproved, asset.fpApproved, asset.gsApproved, asset.finalApproved, asset.status === 'Approved'][i];
+                  return (
+                    <div key={m} className="flex flex-col items-center gap-1">
+                      <div className={`w-1.5 h-1.5 rounded-full transition-all ${approved ? 'bg-emerald-500 shadow-[0_0_5px_#10b981]' : 'bg-slate-800'}`}></div>
+                      <span className={`text-[6px] font-black uppercase ${approved ? 'text-emerald-600' : 'text-slate-700'}`}>{m}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </td>
+          <td className="px-6 py-5 text-center">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{asset.assignedArtists?.[0] || "—"}</span>
+          </td>
+          <td className="px-8 py-5 text-right">
+            <span className={`text-sm font-black tabular-nums ${progress === 100 ? 'text-emerald-500' : 'text-blue-500'}`}>
+              {Math.round(progress)}%
+            </span>
+          </td>
+        </tr>
+        {isExpanded && children.map(v => renderProgressionRow(v, groupName))}
+      </Fragment>
+    );
+  };
 
   return (
     <div className="max-w-full mx-auto px-4 py-12 custom-scrollbar">
@@ -636,82 +719,7 @@ export default function Analytics() {
                         </td>
                       </tr>
                     ) : (
-                      groupAssets.map((asset) => {
-                        const progress = calculateProgress(asset);
-                        return (
-                          <tr 
-                            key={asset.id} 
-                            className={`group hover:bg-white/[0.02] transition-all cursor-pointer ${asset.parentId ? 'bg-white/[0.01]' : ''}`}
-                            onClick={() => window.location.href = `/assets/${asset.id}`}
-                          >
-                            <td className="px-8 py-5">
-                              <div className="flex items-center gap-3">
-                                {asset.parentId && (
-                                  <div className="w-3 h-3 border-l border-b border-white/20 rounded-bl-sm ml-2 flex-shrink-0" />
-                                )}
-                                <div className="flex flex-col min-w-0">
-                                  <span className={`text-sm font-black text-white uppercase tracking-tight group-hover:text-orange-400 transition-colors ${asset.parentId ? 'text-slate-400' : ''}`}>
-                                    {asset.name}
-                                  </span>
-                                  <div className="flex items-center gap-2 mt-0.5">
-                                    <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">{asset.type}</span>
-                                    {asset.parentId && (
-                                      <>
-                                        <span className="w-1 h-1 rounded-full bg-slate-800"></span>
-                                        <span className="text-[7px] font-black text-slate-600 uppercase">Variation</span>
-                                      </>
-                                    )}
-                                    <span className="w-1 h-1 rounded-full bg-slate-800"></span>
-                                    <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">{asset.studio}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-5 text-center">
-                              <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border ${
-                                asset.status === 'Approved' ? 'text-emerald-500 border-emerald-500/20 bg-emerald-500/5' :
-                                asset.status === 'Final Review' ? 'text-orange-500 border-orange-500/20 bg-orange-500/5' :
-                                'text-slate-400 border-white/5 bg-white/5'
-                              }`}>
-                                {asset.status}
-                              </span>
-                            </td>
-                            <td className="px-6 py-5">
-                              <div className="flex flex-col gap-2">
-                                <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden border border-white/5 relative">
-                                  <motion.div 
-                                    initial={{ width: 0 }}
-                                    animate={{ width: `${progress}%` }}
-                                    className={`h-full absolute top-0 left-0 ${
-                                      progress === 100 ? 'bg-emerald-500' : 
-                                      groupName === 'Primary' ? 'bg-orange-500' : 'bg-blue-500'
-                                    }`}
-                                  />
-                                </div>
-                                <div className="flex justify-between gap-1">
-                                  {['INPUT', '1P', 'TEX', 'FP', 'DONE'].map((m, i) => {
-                                    const approved = [asset.bmApproved, asset.fpApproved, asset.gsApproved, asset.finalApproved, asset.status === 'Approved'][i];
-                                    return (
-                                      <div key={m} className="flex flex-col items-center gap-1">
-                                        <div className={`w-1.5 h-1.5 rounded-full transition-all ${approved ? 'bg-emerald-500 shadow-[0_0_5px_#10b981]' : 'bg-slate-800'}`}></div>
-                                        <span className={`text-[6px] font-black uppercase ${approved ? 'text-emerald-600' : 'text-slate-700'}`}>{m}</span>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-5 text-center">
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{asset.assignedArtists?.[0] || "—"}</span>
-                            </td>
-                            <td className="px-8 py-5 text-right">
-                              <span className={`text-sm font-black tabular-nums ${progress === 100 ? 'text-emerald-500' : 'text-blue-500'}`}>
-                                {Math.round(progress)}%
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })
+                      groupAssets.map((asset) => renderProgressionRow(asset, groupName))
                     )}
                   </tbody>
                 </table>
