@@ -25,33 +25,36 @@ export function AddAssetModal({
   });
   
   const [library, setLibrary] = useState<Asset[]>([]);
+  const [fullAssets, setFullAssets] = useState<Asset[]>([]);
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     const fetchData = async () => {
-      const [teamSnap, libSnap] = await Promise.all([
+      const [teamSnap, allAssetsSnap] = await Promise.all([
         getDocs(query(collection(db, "team_members"), where("active", "==", true))),
-        getDocs(query(collection(db, "assets"), where("isReady", "==", true)))
+        getDocs(collection(db, "assets"))
       ]);
 
       const members: TeamMember[] = [];
       teamSnap.forEach(d => members.push({ id: d.id, ...d.data() } as TeamMember));
       setTeam(members);
 
-      const lib: Asset[] = [];
-      libSnap.forEach(d => {
-        const data = d.data() as Asset;
-        // Only show assets not yet in production (no artists assigned)
-        if (!data.assignedArtists || data.assignedArtists.length === 0) {
-          lib.push({ ...data, id: d.id });
-        }
-      });
+      const all: Asset[] = [];
+      allAssetsSnap.forEach(d => all.push({ ...d.data(), id: d.id } as Asset));
+      setFullAssets(all);
+
+      const lib = all.filter(a => a.isReady && (!a.assignedArtists || a.assignedArtists.length === 0));
       setLibrary(lib);
     };
     if (isOpen) fetchData();
   }, [isOpen]);
+
+  const getParentName = (parentId: string) => {
+    const parent = fullAssets.find(a => a.id === parentId);
+    return parent ? parent.name : "Parent";
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -158,7 +161,7 @@ export function AddAssetModal({
                     <option value="" className="bg-slate-900">Select Ready Asset</option>
                     {library.map(a => (
                       <option key={a.id} value={a.id} className="bg-slate-900">
-                        {a.parentId ? `[Variation] ` : `[${a.type}] `} {a.name}
+                        {a.parentId ? `[Variation of ${getParentName(a.parentId)}] ` : `[${a.type}] `} {a.name}
                       </option>
                     ))}
                   </select>
