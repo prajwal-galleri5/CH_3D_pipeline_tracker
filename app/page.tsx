@@ -134,14 +134,15 @@ export default function Home() {
   }, []);
 
   const calculateProgress = (asset: Asset) => {
-    if (asset.status === "Approved" || asset.status === "RM Approved") return 100;
+    const status = asset.status as string;
+    if (status === "Approved" || status === "RM Approved") return 100;
     
     let milestones = 0;
     if (asset.bmApproved) milestones++;
     if (asset.fpApproved) milestones++;
     if (asset.gsApproved) milestones++;
     if (asset.finalApproved) milestones++;
-    if (asset.status === "Approved" || asset.status === "RM Approved") milestones++;
+    if (status === "Approved" || status === "RM Approved") milestones++;
     return (milestones / 5) * 100;
   };
 
