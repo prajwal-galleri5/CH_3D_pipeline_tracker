@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useState, Fragment } from "react";
-import { collection, getDocs, orderBy, query, where, deleteDoc, doc } from "firebase/firestore";
+import { collection, getDocs, orderBy, query, where, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Asset, Version } from "@/types";
 import { Plus, Boxes, CheckCircle, Trash2, ChevronRight } from "lucide-react";
 import { AddAssetModal } from "@/components/AddAssetModal";
 import { motion } from "framer-motion";
+import { useAuth } from "@/lib/AuthContext";
 
 export default function Home() {
+  const { isAdmin } = useAuth();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -60,18 +62,70 @@ export default function Home() {
 
   const handleDeleteAsset = async (id: string, name: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm(`Are you sure you want to delete "${name}" and all its history?`)) return;
+    if (!confirm(`Are you sure you want to stop production for "${name}" and all its variations? This will clear all version history and reset them back to the Library.`)) return;
 
     try {
-      const q = query(collection(db, "versions"), where("assetId", "==", id));
-      const snap = await getDocs(q);
-      const batch = snap.docs.map(d => deleteDoc(d.ref));
-      await Promise.all(batch);
-      await deleteDoc(doc(db, "assets", id));
+      // 1. Find all variations of this asset
+      const variationsQuery = query(collection(db, "assets"), where("parentId", "==", id));
+      const variationsSnap = await getDocs(variationsQuery);
+      const allAssetIdsToReset = [id, ...variationsSnap.docs.map(d => d.id)];
+
+      // 2. Delete version history for the main asset AND all its variations
+      const deleteVersionsPromises = allAssetIdsToReset.map(async (assetId) => {
+        const q = query(collection(db, "versions"), where("assetId", "==", assetId));
+        const snap = await getDocs(q);
+        return Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+      });
+      await Promise.all(deleteVersionsPromises);
+
+      // 3. Reset all these assets in Firestore
+      const resetPromises = allAssetIdsToReset.map((assetId) => {
+        const assetRef = doc(db, "assets", assetId);
+        return updateDoc(assetRef, {
+          assignedArtists: [],
+          status: "Not Started",
+          updatedAt: Date.now(),
+          inputCompletedDate: null,
+          inputExpectedDate: null,
+          firstPassReceived: "No",
+          firstPassReceivedDate: null,
+          firstPassExpectedDate: null,
+          reviewed: "No",
+          reviewedDate: null,
+          greyScaleExpectedDate: null,
+          finalVersionReceivedDate: null,
+          finalVersionExpectedDate: null,
+          finalReviewOutcome: "",
+          bmApproved: false,
+          fpApproved: false,
+          gsApproved: false,
+          finalApproved: false,
+          reviewDueAt: null,
+          vendorActionDueAt: null,
+          vendorNotified: "No",
+          vendorNotifiedDate: null,
+          bmUploadedAt: null,
+          bmReviewedAt: null,
+          bmNotifiedAt: null,
+          fpUploadedAt: null,
+          fpReviewedAt: null,
+          fpNotifiedAt: null,
+          gsUploadedAt: null,
+          gsReviewedAt: null,
+          gsNotifiedAt: null,
+          finalUploadedAt: null,
+          finalReviewedAt: null,
+          finalReviewedAtModel: null,
+          finalReviewedAtRig: null,
+          finalNotifiedAt: null
+        });
+      });
+      await Promise.all(resetPromises);
+
       fetchAssets();
     } catch (err) {
-      console.error("Delete failed:", err);
-      alert("Failed to delete character.");
+      console.error("Multi-reset failed:", err);
+      alert("Failed to reset production task and its variations.");
     }
   };
 
@@ -80,12 +134,14 @@ export default function Home() {
   }, []);
 
   const calculateProgress = (asset: Asset) => {
+    if (asset.status === "Approved" || asset.status === "RM Approved") return 100;
+    
     let milestones = 0;
     if (asset.bmApproved) milestones++;
     if (asset.fpApproved) milestones++;
     if (asset.gsApproved) milestones++;
     if (asset.finalApproved) milestones++;
-    if (asset.status === "Approved") milestones++;
+    if (asset.status === "Approved" || asset.status === "RM Approved") milestones++;
     return (milestones / 5) * 100;
   };
 
@@ -131,6 +187,7 @@ export default function Home() {
       case "Grey scale Model(1st pass)": return "text-cyan-400 border-cyan-500/30 bg-cyan-500/10";
       case "Texture": return "text-purple-400 border-purple-500/30 bg-purple-500/10";
       case "Final Review": return "text-orange-400 border-orange-500/30 bg-orange-500/10";
+      case "RM Approved": return "text-emerald-400 border-emerald-500/50 bg-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.4)]";
       case "Approved": case "Completed": return "text-emerald-400 border-emerald-500/30 bg-emerald-500/10 shadow-[0_0_10px_rgba(16,185,129,0.2)]";
       default: return "text-slate-400 border-slate-800";
     }
@@ -143,12 +200,15 @@ export default function Home() {
     const hasVariations = children.length > 0;
     const isExpanded = expandedRows.has(asset.id);
 
+    const displayProgress = progress;
+    const displayOutcome = asset.status === 'RM Approved' ? { text: "DIRECTOR LOCKED", color: "text-emerald-400 font-black", bg: "bg-emerald-500/20 border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.3)]" } : outcome;
+
     return (
       <Fragment key={asset.id}>
         <tr 
-          className={`group cursor-pointer hover:bg-white/[0.02] transition-all relative ${asset.parentId ? 'bg-white/[0.01]' : ''}`}
+          className={`group cursor-pointer hover:bg-white/[0.02] transition-all relative ${asset.parentId ? 'bg-indigo-500/[0.03]' : ''}`}
           style={{ 
-            backgroundImage: `linear-gradient(to right, rgba(16, 185, 129, 0.04) ${progress}%, transparent ${progress}%)`
+            backgroundImage: `linear-gradient(to right, ${asset.parentId ? 'rgba(99, 102, 241, 0.05)' : 'rgba(16, 185, 129, 0.04)'} ${displayProgress}%, transparent ${displayProgress}%)`
           }}
           onClick={() => window.location.href = `/assets/${asset.id}`}
         >
@@ -163,16 +223,18 @@ export default function Home() {
                 </button>
               )}
               {asset.parentId && (
-                <div className="w-3 h-3 border-l border-b border-white/20 rounded-bl-sm ml-2 flex-shrink-0" />
+                <div className="w-3 h-3 border-l-2 border-b-2 border-indigo-500/30 rounded-bl-sm ml-2 flex-shrink-0" />
               )}
-              <button 
-                onClick={(e) => handleDeleteAsset(asset.id, asset.name, e)}
-                className="p-1.5 text-slate-700 hover:text-red-500 rounded-md transition-all opacity-0 group-hover:opacity-100"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+              {isAdmin && (
+                <button 
+                  onClick={(e) => handleDeleteAsset(asset.id, asset.name, e)}
+                  className="p-1.5 text-slate-700 hover:text-red-500 rounded-md transition-all opacity-0 group-hover:opacity-100"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
               <div className="min-w-0" title={asset.name}>
-                <div className={`font-black text-white text-[11px] uppercase tracking-tight truncate group-hover:text-orange-400 transition-colors ${asset.parentId ? 'text-slate-400' : ''}`}>
+                <div className={`font-black text-[11px] uppercase tracking-tight truncate group-hover:text-orange-400 transition-colors ${asset.parentId ? 'text-indigo-400' : 'text-white'}`}>
                   {asset.name}
                 </div>
                 <div className="flex flex-wrap items-center gap-2 mt-1">
@@ -180,11 +242,11 @@ export default function Home() {
                     {asset.status}
                   </span>
                   {asset.parentId && (
-                    <span className="text-[6px] font-black text-slate-600 uppercase tracking-widest border border-white/5 px-1 rounded-sm whitespace-nowrap">
+                    <span className="text-[6px] font-black text-indigo-400 bg-indigo-400/10 border border-indigo-400/20 px-1.5 py-0.5 rounded-sm uppercase tracking-widest">
                       Variation of {getParentName(asset.parentId)}
                     </span>
                   )}
-                  <span className="text-[7px] font-bold text-slate-600 uppercase tabular-nums">{Math.round(progress)}%</span>
+                  <span className="text-[7px] font-bold text-slate-600 uppercase tabular-nums">{Math.round(displayProgress)}%</span>
                 </div>
               </div>
             </div>
@@ -228,9 +290,9 @@ export default function Home() {
 
           {/* Outcome */}
           <td className="px-6 py-5 text-center">
-            <div className={`inline-flex px-3 py-1 rounded-full border border-white/5 ${outcome.bg}`}>
-              <span className={`text-[9px] font-black uppercase tracking-widest ${outcome.color}`}>
-                {outcome.text}
+            <div className={`inline-flex px-3 py-1 rounded-full border border-white/5 ${displayOutcome.bg}`}>
+              <span className={`text-[9px] font-black uppercase tracking-widest ${displayOutcome.color}`}>
+                {displayOutcome.text}
               </span>
             </div>
           </td>
@@ -253,15 +315,17 @@ export default function Home() {
           </h1>
         </div>
 
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 px-6 py-3 bg-orange-600 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all shadow-lg whitespace-nowrap shadow-orange-900/20"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Initialize Production</span>
-        </motion.button>
+        {isAdmin && (
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-2 px-6 py-3 bg-orange-600 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all shadow-lg whitespace-nowrap shadow-orange-900/20"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Initialize Production</span>
+          </motion.button>
+        )}
       </div>
 
       {loading ? (
