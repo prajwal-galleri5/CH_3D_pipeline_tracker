@@ -201,6 +201,7 @@ export default function Analytics() {
   );
 
   const artistList = Array.from(new Set(displayedAssets.flatMap(a => a.assignedArtists || []))).sort();
+  const reviewerList = team.filter(m => m.role === 'Reviewer' && m.active).sort((a, b) => a.name.localeCompare(b.name));
   const assetGroups = groupAssets();
 
   const renderProgressionRow = (asset: Asset, groupName: string) => {
@@ -445,6 +446,106 @@ export default function Analytics() {
                               animate={{ width: `${progress}%` }}
                               className="h-full bg-blue-500 group-hover/item:bg-emerald-500 transition-colors"
                             />
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Reviewer Intelligence Section */}
+      <div className="max-w-7xl mx-auto mb-16">
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-1 bg-blue-600 rounded-full"></div>
+            <span className="text-blue-500 font-bold uppercase tracking-widest text-[10px]">Team Analytics</span>
+          </div>
+          <h2 className="text-3xl font-bold text-white uppercase tracking-tight">Reviewer Intelligence</h2>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {reviewerList.length === 0 ? (
+            <div className="col-span-full py-20 text-center cinematic-glass rounded-3xl border border-dashed border-white/10">
+              <p className="text-slate-600 font-bold uppercase tracking-widest text-xs">No active reviewers found</p>
+            </div>
+          ) : reviewerList.map((reviewer, idx) => {
+            const memberReviews = versions.filter(v => 
+              (selectedDate ? new Date(v.createdAt).toISOString().split('T')[0] === selectedDate : true) &&
+              (v.reviewerId === reviewer.id || v.reviewerModelId === reviewer.id || v.reviewerRigId === reviewer.id)
+            );
+
+            // Agility calculation
+            const turnarounds: number[] = [];
+            memberReviews.forEach(v => {
+              const finish = v.reviewedAt || v.reviewedAtModel || v.reviewedAtRig;
+              if (finish) turnarounds.push((finish - v.createdAt) / (1000 * 60 * 60));
+            });
+            const avgHours = turnarounds.length > 0 ? turnarounds.reduce((a,b) => a+b, 0) / turnarounds.length : 0;
+            const agilityLabel = avgHours === 0 ? "—" : avgHours < 1 ? "Elite" : avgHours < 4 ? "High" : avgHours < 12 ? "Standard" : "Low";
+
+            const approvedCount = memberReviews.filter(v => {
+              if (v.stage === 'Final Package') {
+                return (v.reviewerModelId === reviewer.id && v.statusModel === 'Approved') || 
+                       (v.reviewerRigId === reviewer.id && v.statusRig === 'Approved');
+              }
+              return v.status === 'Approved' || v.status === 'RM Approved';
+            }).length;
+
+            return (
+              <motion.div
+                key={reviewer.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.05 }}
+                className="cinematic-glass p-6 rounded-3xl border border-white/5 flex flex-col group hover:border-blue-500/30 transition-all"
+              >
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500 shrink-0">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-base font-black text-white uppercase truncate group-hover:text-blue-400 transition-colors">{reviewer.name}</h3>
+                    <div className="flex items-center gap-1.5">
+                      <div className={`w-1.5 h-1.5 rounded-full ${agilityLabel === 'Elite' || agilityLabel === 'High' ? 'bg-emerald-500' : agilityLabel === 'Standard' ? 'bg-yellow-500' : 'bg-slate-500'}`}></div>
+                      <span className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">{agilityLabel} Agility</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 mb-6">
+                  <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/5">
+                    <div className="text-lg font-black text-white tabular-nums">{memberReviews.length}</div>
+                    <div className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">Reviews</div>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/5">
+                    <div className="text-lg font-black text-emerald-400 tabular-nums">{approvedCount}</div>
+                    <div className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">Approved</div>
+                  </div>
+                </div>
+
+                <div className="space-y-2 mt-auto">
+                  <div className="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-1">Recent Activity</div>
+                  {memberReviews.length === 0 ? (
+                    <div className="text-[8px] text-slate-700 italic font-bold uppercase">No records</div>
+                  ) : (
+                    memberReviews.slice(0, 3).map(v => {
+                      const asset = assets.find(a => a.id === v.assetId);
+                      return (
+                        <div 
+                          key={v.id} 
+                          onClick={() => window.location.href = `/assets/${v.assetId}`}
+                          className="flex flex-col gap-1 p-2 rounded-xl bg-white/5 hover:bg-blue-500/10 transition-colors cursor-pointer group/item"
+                        >
+                          <div className="flex items-center justify-between text-[10px]">
+                            <span className="text-white font-bold truncate mr-2">{asset?.name || "Unknown"}</span>
+                            <span className={`text-[8px] font-black shrink-0 ${v.status.includes('Approved') ? 'text-emerald-500' : 'text-orange-500'}`}>
+                              {v.stage.split(' ')[0]}
+                            </span>
                           </div>
                         </div>
                       );
