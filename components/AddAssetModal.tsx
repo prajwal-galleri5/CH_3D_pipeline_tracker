@@ -91,9 +91,10 @@ export function AddAssetModal({
 
       // Slack Notification
       if (selectedArtist) {
+        const variationContext = selectedLibAsset.parentId ? ` (Variation of ${getParentName(selectedLibAsset.parentId)})` : '';
         await notifyArtistsByName(
           [selectedArtist],
-          `you have been assigned to a new asset: *${selectedLibAsset.name}* (${formData.studio}). Stage: Base input.`
+          `you have been assigned to a new asset: *${selectedLibAsset.name}*${variationContext} (${formData.studio}). Stage: Base input.`
         );
       }
 
@@ -160,8 +161,8 @@ export function AddAssetModal({
                   <select name="assetId" required value={formData.assetId} onChange={handleChange} className="w-full pl-10 pr-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl text-white font-bold focus:border-orange-500/50 outline-none transition appearance-none">
                     <option value="" className="bg-slate-900">Select Ready Asset</option>
                     {library.map(a => (
-                      <option key={a.id} value={a.id} className="bg-slate-900">
-                        {a.parentId ? `[Variation of ${getParentName(a.parentId)}] ` : `[${a.type}] `} {a.name}
+                      <option key={a.id} value={a.id} className={`${a.parentId ? 'text-indigo-400 font-black' : 'text-white font-bold'} bg-slate-900`}>
+                        {a.parentId ? `[VARIATION] ` : `[${a.type}] `} {a.name} {a.parentId ? `(of ${getParentName(a.parentId)})` : ''}
                       </option>
                     ))}
                   </select>

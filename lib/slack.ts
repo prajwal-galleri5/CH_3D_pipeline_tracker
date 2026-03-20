@@ -1,31 +1,45 @@
-"use server";
+"use client";
 
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, getDoc } from "firebase/firestore";
 import { db } from "./firebase";
-import { TeamMember } from "@/types";
+import { TeamMember, GlobalSettings } from "@/types";
 
 const SLACK_WEBHOOK_URL = process.env.NEXT_PUBLIC_SLACK_WEBHOOK_URL || process.env.SLACK_WEBHOOK_URL;
 
 export async function sendSlackNotification(message: string, personSlackId?: string) {
   if (!SLACK_WEBHOOK_URL) {
-    console.warn("Slack Webhook URL not found. Skipping notification.");
+    console.log("Slack Setup: Webhook URL not found. Notification skipped.");
     return;
   }
 
-  const finalMessage = personSlackId ? `<@${personSlackId}> ${message}` : message;
-
   try {
-    const response = await fetch(SLACK_WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: finalMessage }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Slack notification failed with status: ${response.status}`);
+    // Check Global Toggle
+    const settingsRef = doc(db, "settings", "app_settings");
+    const settingsSnap = await getDoc(settingsRef);
+    if (settingsSnap.exists()) {
+      const settings = settingsSnap.data() as GlobalSettings;
+      if (settings.slackNotificationsEnabled === false) {
+        console.log("Slack Global: Notifications are disabled in settings.");
+        return;
+      }
     }
+
+    const finalMessage = personSlackId ? `<@${personSlackId}> ${message}` : message;
+
+    const body = new URLSearchParams();
+    body.append('payload', JSON.stringify({ text: finalMessage }));
+
+    await fetch(SLACK_WEBHOOK_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: body.toString(),
+    });
+    console.log("Slack Dispatch: Notification sent successfully.");
   } catch (error) {
-    console.error("Error sending Slack notification:", error);
+    console.error("Slack Error: Failed to send notification.", error);
   }
 }
 
@@ -40,21 +54,27 @@ export async function notifyArtistsByName(artistNames: string[], message: string
   if (trimmedNames.length === 0) return;
 
   try {
+    console.log("Slack Lookup: Finding IDs for:", trimmedNames);
     const teamRef = collection(db, "team_members");
-    // Firebase 'in' operator supports up to 10 items.
     const q = query(teamRef, where("name", "in", trimmedNames));
     const snap = await getDocs(q);
+    
+    console.log(`Slack Lookup: Found ${snap.size} members.`);
     
     const notifications: Promise<void>[] = [];
     snap.forEach(docSnap => {
       const member = docSnap.data() as TeamMember;
-      if (member.slackId && member.active) {
+      // Respect individual toggle
+      if (member.slackId && member.active && member.slackEnabled !== false) {
+        console.log(`Slack Dispatch: Notifying ${member.name} (${member.slackId})`);
         notifications.push(sendSlackNotification(message, member.slackId));
+      } else if (member.slackEnabled === false) {
+        console.log(`Slack Dispatch: Skipped ${member.name} (Individual toggle OFF)`);
       }
     });
     
     await Promise.all(notifications);
   } catch (error) {
-    console.error("Error notifying artists by name:", error);
+    console.error("Slack Error: Lookup failed.", error);
   }
 }
