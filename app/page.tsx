@@ -1,18 +1,30 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, getDocs, orderBy, query, where, deleteDoc, doc } from "firebase/firestore";
+import { collection, getDocs, orderBy, query, where, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Asset, Version } from "@/types";
 import { Plus, Boxes, CheckCircle, Trash2 } from "lucide-react";
 import { AddAssetModal } from "@/components/AddAssetModal";
+import ThematicModal from "@/components/ThematicModal";
 import { motion } from "framer-motion";
+import { useAuth } from "@/lib/AuthContext";
 
 export default function Home() {
+  const { isAdmin } = useAuth();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [error, setError] = useState("");
+
+  // Thematic Modal State
+  const [isThematicModalOpen, setIsThematicModalOpen] = useState(false);
+  const [modalConfig, setModalConfig] = useState<{
+    type: "confirm" | "danger" | "info";
+    title: string;
+    description: string;
+    onConfirm?: () => void;
+  }>({ type: "info", title: "", description: "" });
 
   const fetchAssets = async () => {
     setLoading(true);
@@ -40,21 +52,45 @@ export default function Home() {
     }
   };
 
-  const handleDeleteAsset = async (id: string, name: string, e: React.MouseEvent) => {
+  const handleDeleteAsset = (id: string, name: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm(`Are you sure you want to delete "${name}" and all its history?`)) return;
-
-    try {
-      const q = query(collection(db, "versions"), where("assetId", "==", id));
-      const snap = await getDocs(q);
-      const batch = snap.docs.map(d => deleteDoc(d.ref));
-      await Promise.all(batch);
-      await deleteDoc(doc(db, "assets", id));
-      fetchAssets();
-    } catch (err) {
-      console.error("Delete failed:", err);
-      alert("Failed to delete character.");
-    }
+    if (!isAdmin) return;
+    
+    setModalConfig({
+      type: "danger",
+      title: "Stop Production",
+      description: `Are you sure you want to stop production for "${name}"? This will clear all version history and reset it back to the Library.`,
+      onConfirm: async () => {
+        try {
+          const q = query(collection(db, "versions"), where("assetId", "==", id));
+          const snap = await getDocs(q);
+          const batch = snap.docs.map(d => deleteDoc(d.ref));
+          await Promise.all(batch);
+          
+          await updateDoc(doc(db, "assets", id), {
+            assignedArtists: [],
+            status: "Not Started",
+            updatedAt: Date.now(),
+            bmApproved: false,
+            fpApproved: false,
+            gsApproved: false,
+            finalApproved: false
+          });
+          
+          setIsThematicModalOpen(false);
+          fetchAssets();
+        } catch (err) {
+          console.error("Delete failed:", err);
+          setModalConfig({
+            type: "info",
+            title: "Error",
+            description: "Failed to reset production task."
+          });
+          setIsThematicModalOpen(true);
+        }
+      }
+    });
+    setIsThematicModalOpen(true);
   };
 
   useEffect(() => {
@@ -131,15 +167,17 @@ export default function Home() {
           </h1>
         </div>
 
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 px-6 py-3 bg-orange-600 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all shadow-lg whitespace-nowrap shadow-orange-900/20"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Initialize Production</span>
-        </motion.button>
+        {isAdmin && (
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-2 px-6 py-3 bg-orange-600 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all shadow-lg whitespace-nowrap shadow-orange-900/20"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Initialize Production</span>
+          </motion.button>
+        )}
       </div>
 
       {loading ? (
@@ -188,12 +226,14 @@ export default function Home() {
                       >
                         <td className="px-6 py-5 sticky left-0 bg-slate-900/95 backdrop-blur-md group-hover:bg-slate-800 transition-colors z-10 border-r border-white/5">
                           <div className="flex items-center gap-4">
-                            <button 
-                              onClick={(e) => handleDeleteAsset(asset.id, asset.name, e)}
-                              className="p-1.5 text-slate-700 hover:text-red-500 rounded-md transition-all opacity-0 group-hover:opacity-100"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {isAdmin && (
+                              <button 
+                                onClick={(e) => handleDeleteAsset(asset.id, asset.name, e)}
+                                className="p-1.5 text-slate-700 hover:text-red-500 rounded-md transition-all opacity-0 group-hover:opacity-100"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                             <div className="min-w-0" title={asset.name}>
                               <div className="font-black text-white text-[11px] uppercase tracking-tight truncate group-hover:text-orange-400 transition-colors">
                                 {asset.name}
@@ -266,6 +306,15 @@ export default function Home() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onAssetAdded={fetchAssets}
+      />
+
+      <ThematicModal
+        isOpen={isThematicModalOpen}
+        onClose={() => setIsThematicModalOpen(false)}
+        type={modalConfig.type}
+        title={modalConfig.title}
+        description={modalConfig.description}
+        onConfirm={modalConfig.onConfirm}
       />
     </motion.div>
   );

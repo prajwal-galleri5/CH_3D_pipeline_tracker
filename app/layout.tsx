@@ -18,6 +18,8 @@ export const metadata: Metadata = {
   description: "Asset pipeline tracking for Hanuman movie",
 };
 
+import { AuthProvider } from "@/lib/AuthContext";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -28,10 +30,12 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-gray-50 dark:bg-black`}
       >
-        <Navbar />
-        <main className="w-full px-2 sm:px-4 lg:px-6 py-8">
-          {children}
-        </main>
+        <AuthProvider>
+          <Navbar />
+          <main className="w-full px-2 sm:px-4 lg:px-6 py-8">
+            {children}
+          </main>
+        </AuthProvider>
       </body>
     </html>
   );

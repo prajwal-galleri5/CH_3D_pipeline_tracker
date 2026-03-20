@@ -7,11 +7,14 @@ import { TeamMember, TeamRole, VersionStage, ReviewerExpertise } from "@/types";
 import { Plus, Users, Trash2, ShieldCheck, User, X, CheckCircle, AlertCircle, ArrowLeft, Edit2, Activity, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
+import { useAuth } from "@/lib/AuthContext";
+import ThematicModal from "@/components/ThematicModal";
 
 const VERSION_STAGES: VersionStage[] = ['Base input', 'Grey scale Model(1st pass)', 'Texture', 'Final Package'];
 const EXPERTISE_OPTIONS: ReviewerExpertise[] = ['Model/Texture', 'Rig/Animation'];
 
 export default function TeamManagement() {
+  const { isAdmin } = useAuth();
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -22,6 +25,14 @@ export default function TeamManagement() {
   const [selectedExpertise, setSelectedExpertise] = useState<ReviewerExpertise[]>([]);
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
 
+  // Thematic Modal State
+  const [isThematicModalOpen, setIsThematicModalOpen] = useState(false);
+  const [modalConfig, setModalConfig] = useState<{
+    type: "confirm" | "danger" | "info";
+    title: string;
+    description: string;
+    onConfirm?: () => void;
+  }>({ type: "info", title: "", description: "" });
 
   const fetchMembers = async () => {
     setLoading(true);
@@ -46,7 +57,7 @@ export default function TeamManagement() {
 
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName) return;
+    if (!isAdmin || !newName) return;
 
     try {
       if (editingMemberId) {
@@ -80,6 +91,7 @@ export default function TeamManagement() {
   };
 
   const handleEditClick = (member: TeamMember) => {
+    if (!isAdmin) return;
     setNewName(member.name);
     setNewSlackId(member.slackId || "");
     setNewRole(member.role);
@@ -89,17 +101,28 @@ export default function TeamManagement() {
     setShowAddModal(true);
   };
 
-  const handleDeleteMember = async (id: string) => {
-    if (!confirm("Are you sure you want to remove this team member?")) return;
-    try {
-      await deleteDoc(doc(db, "team_members", id));
-      fetchMembers();
-    } catch (err) {
-      console.error("Error deleting member:", err);
-    }
+  const handleDeleteMember = (id: string, name: string) => {
+    if (!isAdmin) return;
+    
+    setModalConfig({
+      type: "danger",
+      title: "Remove Member",
+      description: `Are you sure you want to permanently remove "${name}" from the team?`,
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, "team_members", id));
+          setIsThematicModalOpen(false);
+          fetchMembers();
+        } catch (err) {
+          console.error("Error deleting member:", err);
+        }
+      }
+    });
+    setIsThematicModalOpen(true);
   };
 
   const toggleMemberActive = async (member: TeamMember) => {
+    if (!isAdmin) return;
     try {
       await updateDoc(doc(db, "team_members", member.id), {
         active: !member.active
@@ -130,23 +153,25 @@ export default function TeamManagement() {
           </h1>
         </div>
 
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={() => {
-            setNewName("");
-            setNewSlackId("");
-            setNewRole("Artist");
-            setSelectedStages([]);
-            setSelectedExpertise([]);
-            setEditingMemberId(null);
-            setShowAddModal(true);
-          }}
-          className="flex items-center gap-2 px-6 py-3 bg-orange-600 text-white font-bold rounded-xl transition-all shadow-lg"
-        >
-          <Plus className="w-5 h-5" />
-          <span>Add Member</span>
-        </motion.button>
+        {isAdmin && (
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => {
+              setNewName("");
+              setNewSlackId("");
+              setNewRole("Artist");
+              setSelectedStages([]);
+              setSelectedExpertise([]);
+              setEditingMemberId(null);
+              setShowAddModal(true);
+            }}
+            className="flex items-center gap-2 px-6 py-3 bg-orange-600 text-white font-bold rounded-xl transition-all shadow-lg"
+          >
+            <Plus className="w-5 h-5" />
+            <span>Add Member</span>
+          </motion.button>
+        )}
       </div>
 
       {loading ? (
@@ -213,27 +238,29 @@ export default function TeamManagement() {
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={() => handleEditClick(member)}
-                      className="p-2 text-slate-500 hover:text-orange-500 hover:bg-orange-500/10 rounded-lg transition-colors"
-                      title="Edit Member"
-                    >
-                      <Edit2 className="w-5 h-5" />
-                    </button>
-                    <button 
-                      onClick={() => toggleMemberActive(member)}
-                      className={`p-2 rounded-lg transition-colors ${member.active ? 'text-emerald-500 hover:bg-emerald-500/10' : 'text-slate-500 hover:bg-slate-500/10'}`}
-                    >
-                      <CheckCircle className={`w-5 h-5 ${member.active ? 'fill-emerald-500/20' : ''}`} />
-                    </button>
-                    <button 
-                      onClick={() => handleDeleteMember(member.id)}
-                      className="p-2 text-slate-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
-                  </div>
+                  {isAdmin && (
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => handleEditClick(member)}
+                        className="p-2 text-slate-500 hover:text-orange-500 hover:bg-orange-500/10 rounded-lg transition-colors"
+                        title="Edit Member"
+                      >
+                        <Edit2 className="w-5 h-5" />
+                      </button>
+                      <button 
+                        onClick={() => toggleMemberActive(member)}
+                        className={`p-2 rounded-lg transition-colors ${member.active ? 'text-emerald-500 hover:bg-emerald-500/10' : 'text-slate-500 hover:bg-slate-500/10'}`}
+                      >
+                        <CheckCircle className={`w-5 h-5 ${member.active ? 'fill-emerald-500/20' : ''}`} />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteMember(member.id, member.name)}
+                        className="p-2 text-slate-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {!member.active && (
@@ -312,6 +339,7 @@ export default function TeamManagement() {
                   <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Role</label>
                   <div className="grid grid-cols-3 gap-2">
                     <button
+                      key="Artist"
                       type="button"
                       onClick={() => {
                         setNewRole("Artist");
@@ -322,6 +350,7 @@ export default function TeamManagement() {
                       Artist
                     </button>
                     <button
+                      key="Reviewer"
                       type="button"
                       onClick={() => {
                         setNewRole("Reviewer");
@@ -332,6 +361,7 @@ export default function TeamManagement() {
                       Reviewer
                     </button>
                     <button
+                      key="Ops"
                       type="button"
                       onClick={() => {
                         setNewRole("Ops");
@@ -416,6 +446,15 @@ export default function TeamManagement() {
           </div>
         )}
       </AnimatePresence>
+
+      <ThematicModal
+        isOpen={isThematicModalOpen}
+        onClose={() => setIsThematicModalOpen(false)}
+        type={modalConfig.type}
+        title={modalConfig.title}
+        description={modalConfig.description}
+        onConfirm={modalConfig.onConfirm}
+      />
     </motion.div>
   );
 }

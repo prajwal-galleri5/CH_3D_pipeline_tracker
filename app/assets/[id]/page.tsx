@@ -9,8 +9,11 @@ import { ArrowLeft, ExternalLink, FileText, CheckCircle, XCircle, Clock, Plus, E
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { notifyArtistsByName, sendSlackNotification } from "@/lib/slack";
+import { useAuth } from "@/lib/AuthContext";
+import ThematicModal from "@/components/ThematicModal";
 
 export default function AssetDetails() {
+  const { isAdmin } = useAuth();
   const params = useParams();
   const assetId = params.id as string;
 
@@ -38,6 +41,17 @@ export default function AssetDetails() {
   const [selectedReviewerRigId, setSelectedReviewerRigId] = useState("");
   const [modelStatus, setModelStatus] = useState<VersionStatus>("Pending Review");
   const [rigStatus, setRigStatus] = useState<VersionStatus>("Pending Review");
+
+  // Thematic Modal State
+  const [isThematicModalOpen, setIsThematicModalOpen] = useState(false);
+  const [modalConfig, setModalConfig] = useState<{
+    type: "confirm" | "danger" | "info" | "prompt";
+    title: string;
+    description: string;
+    onConfirm?: (val?: string) => void;
+    confirmText?: string;
+    placeholder?: string;
+  }>({ type: "info", title: "", description: "" });
 
   const fetchAssetAndVersions = async () => {
     if (!assetId) return;
@@ -249,6 +263,7 @@ export default function AssetDetails() {
   };
 
   const handleUpdateAsset = async () => {
+    if (!isAdmin) return;
     if (!assetId || !asset) return;
     try {
       const updatePayload: any = { ...editData };
@@ -286,7 +301,7 @@ export default function AssetDetails() {
       // Slack Notification for newly added artists
       const oldArtists = asset.assignedArtists || [];
       const newArtists = updatePayload.assignedArtists || [];
-      const addedArtists = newArtists.filter(a => !oldArtists.includes(a));
+      const addedArtists = newArtists.filter((a: string) => !oldArtists.includes(a));
       
       if (addedArtists.length > 0) {
         await notifyArtistsByName(
@@ -299,34 +314,61 @@ export default function AssetDetails() {
       fetchAssetAndVersions();
     } catch (err) {
       console.error("Update failed", err);
-      alert("Failed to save changes.");
+      setModalConfig({
+        type: "info",
+        title: "Update Failed",
+        description: "Failed to save character changes."
+      });
+      setIsThematicModalOpen(true);
     }
   };
 
-  const handleDeleteAsset = async () => {
+  const handleDeleteAsset = () => {
+    if (!isAdmin) return;
     if (!asset) return;
-    const confirmName = prompt(`To delete this character, please type its name: "${asset.name}"`);
-    if (confirmName !== asset.name) {
-      if (confirmName !== null) alert("Name does not match. Deletion cancelled.");
-      return;
-    }
 
-    try {
-      setLoading(true);
-      // Delete versions associated with this asset
-      const qv = query(collection(db, "versions"), where("assetId", "==", assetId));
-      const versionsSnap = await getDocs(qv);
-      const deletePromises = versionsSnap.docs.map(d => deleteDoc(d.ref));
-      await Promise.all(deletePromises);
+    setModalConfig({
+      type: "prompt",
+      title: "Delete Character",
+      description: `To delete this character, please type its name: "${asset.name}"`,
+      confirmText: "Delete",
+      placeholder: asset.name,
+      onConfirm: async (confirmName) => {
+        if (confirmName !== asset.name) {
+          setModalConfig({
+            type: "info",
+            title: "Verification Failed",
+            description: "Name does not match. Deletion cancelled."
+          });
+          setIsThematicModalOpen(true);
+          return;
+        }
 
-      // Delete the asset itself
-      await deleteDoc(doc(db, "assets", assetId));
-      window.location.href = "/";
-    } catch (err) {
-      console.error("Delete failed", err);
-      alert("Failed to delete character.");
-      setLoading(false);
-    }
+        try {
+          setIsThematicModalOpen(false);
+          setLoading(true);
+          // Delete versions associated with this asset
+          const qv = query(collection(db, "versions"), where("assetId", "==", assetId));
+          const versionsSnap = await getDocs(qv);
+          const deletePromises = versionsSnap.docs.map(d => deleteDoc(d.ref));
+          await Promise.all(deletePromises);
+
+          // Delete the asset itself
+          await deleteDoc(doc(db, "assets", assetId));
+          window.location.href = "/";
+        } catch (err) {
+          console.error("Delete failed", err);
+          setModalConfig({
+            type: "info",
+            title: "Error",
+            description: "Failed to delete character."
+          });
+          setIsThematicModalOpen(true);
+          setLoading(false);
+        }
+      }
+    });
+    setIsThematicModalOpen(true);
   };
 
   const handleAddVersion = async (e: React.FormEvent) => {
@@ -419,71 +461,89 @@ export default function AssetDetails() {
   };
 
   const handleMarkSent = async (version: Version) => {
+    if (!isAdmin) return;
     if (version.status !== 'Approved') return;
     if (!asset) return;
 
-    try {
-      const emailLink = prompt("Enter the link to the sent email (Optional):") || "";
-      
-      const versionUpdate = {
-        refSent: "Yes" as const,
-        emailLink: emailLink
-      };
+    setModalConfig({
+      type: "prompt",
+      title: "Confirm Dispatch",
+      description: "Enter the link to the sent email / thread (Optional):",
+      confirmText: "Mark Sent",
+      placeholder: "https://mail.google.com/...",
+      onConfirm: async (emailLink) => {
+        try {
+          const versionUpdate = {
+            refSent: "Yes" as const,
+            emailLink: emailLink || ""
+          };
 
-      await updateDoc(doc(db, "versions", version.id), versionUpdate);
+          await updateDoc(doc(db, "versions", version.id), versionUpdate);
 
-      // Automation logic moved here from handleUpdateVersion
-      const assetUpdate: any = { 
-        updatedAt: Date.now(),
-        vendorActionDueAt: null // Clear timer
-      };
+          const assetUpdate: any = { 
+            updatedAt: Date.now(),
+            vendorActionDueAt: null // Clear timer
+          };
 
-      // Set timestamps for timeline
-      if (version.stage === 'Base input') assetUpdate.bmNotifiedAt = Date.now();
-      else if (version.stage === 'Grey scale Model(1st pass)') assetUpdate.fpNotifiedAt = Date.now();
-      else if (version.stage === 'Texture') assetUpdate.gsNotifiedAt = Date.now();
-      else if (version.stage === 'Final Package') assetUpdate.finalNotifiedAt = Date.now();
+          if (version.stage === 'Base input') assetUpdate.bmNotifiedAt = Date.now();
+          else if (version.stage === 'Grey scale Model(1st pass)') assetUpdate.fpNotifiedAt = Date.now();
+          else if (version.stage === 'Texture') assetUpdate.gsNotifiedAt = Date.now();
+          else if (version.stage === 'Final Package') assetUpdate.finalNotifiedAt = Date.now();
 
-      // Rule: Once base model/reference is sent, Grey scale Model(1st pass) is expected in T + 3 Days
-      if (version.stage === 'Base input') {
-        const fpExpected = new Date();
-        fpExpected.setDate(fpExpected.getDate() + 3);
-        assetUpdate.firstPassExpectedDate = fpExpected.toISOString().split('T')[0];
-        assetUpdate.refSentDate = new Date().toISOString().split('T')[0];
+          if (version.stage === 'Base input') {
+            const fpExpected = new Date();
+            fpExpected.setDate(fpExpected.getDate() + 3);
+            assetUpdate.firstPassExpectedDate = fpExpected.toISOString().split('T')[0];
+            assetUpdate.refSentDate = new Date().toISOString().split('T')[0];
+          }
+
+          if (version.stage === 'Grey scale Model(1st pass)') {
+            const in2Days = new Date();
+            in2Days.setDate(in2Days.getDate() + 2);
+            assetUpdate.greyScaleExpectedDate = in2Days.toISOString().split('T')[0];
+          }
+
+          await updateDoc(doc(db, "assets", assetId), assetUpdate);
+          setIsThematicModalOpen(false);
+          fetchAssetAndVersions();
+        } catch (err) {
+          console.error(err);
+        }
       }
-
-      // Rule: Once vendor notified of Grey scale Model(1st pass) approval, Texture expected in T + 2 Days
-      if (version.stage === 'Grey scale Model(1st pass)') {
-        const in2Days = new Date();
-        in2Days.setDate(in2Days.getDate() + 2);
-        assetUpdate.greyScaleExpectedDate = in2Days.toISOString().split('T')[0];
-      }
-
-      await updateDoc(doc(db, "assets", assetId), assetUpdate);
-      fetchAssetAndVersions();
-    } catch (err) {
-      console.error(err);
-    }
+    });
+    setIsThematicModalOpen(true);
   };
 
-  const handleDeleteVersion = async (versionId: string) => {
-    if (!confirm("Are you sure?")) return;
-    try {
-      await deleteDoc(doc(db, "versions", versionId));
-      const remainingVersions = versions.filter(v => v.id !== versionId);
-      await syncAssetStatus(remainingVersions);
-      fetchAssetAndVersions();
-    } catch (err) {
-      console.error("Delete failed", err);
-    }
+  const handleDeleteVersion = (versionId: string) => {
+    if (!isAdmin) return;
+    
+    setModalConfig({
+      type: "danger",
+      title: "Delete Version",
+      description: "Are you sure? This will permanently remove this version and its history.",
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, "versions", versionId));
+          const remainingVersions = versions.filter(v => v.id !== versionId);
+          await syncAssetStatus(remainingVersions);
+          setIsThematicModalOpen(false);
+          fetchAssetAndVersions();
+        } catch (err) {
+          console.error("Delete failed", err);
+        }
+      }
+    });
+    setIsThematicModalOpen(true);
   };
 
   const handleStartEditVersion = (version: Version) => {
+    if (!isAdmin) return;
     setEditingVersionId(version.id);
     setVersionEditData(version);
   };
 
   const handleUpdateVersion = async () => {
+    if (!isAdmin) return;
     if (!editingVersionId) return;
     try {
       const version = versions.find(v => v.id === editingVersionId);
@@ -521,19 +581,40 @@ export default function AssetDetails() {
       await updateDoc(doc(db, "versions", editingVersionId), updatePayload);
 
       // Slack Notification for Status Change via Edit
-      if (updatePayload.status !== version.status && asset.assignedArtists?.length > 0) {
+      if (updatePayload.status !== version.status && asset?.assignedArtists?.length! > 0) {
         const feedbackMsg = `\nNote: ${updatePayload.reviewNote || "None"}\nLink: ${updatePayload.reviewNoteLink || "None"}`;
+        const opsMember = await getNextOpsMember();
         
         if (updatePayload.status === "Approved") {
-          await notifyArtistsByName(
-            asset.assignedArtists,
-            `Stage *${version.stage}* for *${asset.name}* has been Approved!${feedbackMsg}`
-          );
+          // Rule: Notify Artist of approval ONLY for Base input
+          if (version.stage === 'Base input') {
+            await notifyArtistsByName(
+              asset?.assignedArtists!,
+              `Stage *${version.stage}* for *${asset?.name}* has been Approved!${feedbackMsg}`
+            );
+          }
+
+          // Rule: Notify Ops for ALL approvals (including Base input) if not inhouse
+          if (asset?.studio !== 'Inhouse' && opsMember?.slackId) {
+            await sendSlackNotification(
+              `*ACTION: Notify Vendor*\nStage *${version.stage}* Approved via Edit for *${asset?.name}* (${asset?.studio}). Please notify the vendor.${feedbackMsg}`,
+              opsMember.slackId
+            );
+          }
         } else if (updatePayload.status === "Corrections Needed") {
-          await notifyArtistsByName(
-            asset.assignedArtists,
-            `Rework required for *${asset.name}* (Stage: ${version.stage}).${feedbackMsg}`
-          );
+          // Rule: Base input rework -> Notify Artist only
+          if (version.stage === 'Base input') {
+            await notifyArtistsByName(
+              asset?.assignedArtists!,
+              `Rework required for *${asset?.name}* (Stage: ${version.stage}).${feedbackMsg}`
+            );
+          } else if (asset?.studio !== 'Inhouse' && opsMember?.slackId) {
+            // Rule: Other stage rework -> Notify Ops only (if not inhouse)
+            await sendSlackNotification(
+              `*ACTION: Notify Vendor*\nRework required for *${asset?.name}* (${asset?.studio}). Please notify the vendor.\nStage: ${version.stage}${feedbackMsg}`,
+              opsMember.slackId
+            );
+          }
         }
       }
 
@@ -561,8 +642,14 @@ export default function AssetDetails() {
   };
 
   const handleAddReviewNote = async (versionId: string) => {
+    if (!isAdmin) return;
     if (!selectedReviewerId || !asset) {
-      alert("Please select a reviewer.");
+      setModalConfig({
+        type: "info",
+        title: "Reviewer Required",
+        description: "Please select a reviewer to submit feedback."
+      });
+      setIsThematicModalOpen(true);
       return;
     }
     const version = versions.find(v => v.id === versionId);
@@ -600,34 +687,28 @@ export default function AssetDetails() {
       reviewedAt: Date.now()
     });
 
-    if (Object.keys(assetUpdate).length > 1) {
-      await updateDoc(doc(db, "assets", assetId), assetUpdate);
-    }
+    await updateDoc(doc(db, "assets", assetId), assetUpdate);
 
     const updatedVersions = versions.map(v => 
       v.id === versionId ? { ...v, reviewNoteLink: reviewLink, reviewNote: reviewTextNote, status: newStatus, reviewerId: selectedReviewerId } as Version : v
     );
     await syncAssetStatus(updatedVersions);
 
-    // Slack Notification for Rework
     const feedbackMsg = `\nNote: ${reviewTextNote || "None"}\nLink: ${reviewLink || "None"}`;
     const opsMember = await getNextOpsMember();
-    const artistSlackIds = teamMembers
-      .filter(m => asset.assignedArtists?.includes(m.name) && m.slackId && m.active)
-      .map(m => m.slackId!);
-    const isOpsAlsoArtist = opsMember?.slackId && artistSlackIds.includes(opsMember.slackId);
 
-    if (newStatus === "Corrections Needed" && asset.assignedArtists?.length > 0) {
+    // 1. BASE INPUT REWORK -> Notify Artist Only
+    if (newStatus === "Corrections Needed" && version.stage === 'Base input' && asset.assignedArtists?.length! > 0) {
       await notifyArtistsByName(
-        asset.assignedArtists,
-        `Rework required for *${asset.name}* (Stage: ${version.stage}).${feedbackMsg}${isOpsAlsoArtist && asset.studio !== 'Inhouse' ? "\n*Action: Please notify the vendor.*" : ""}`
+        asset.assignedArtists!,
+        `Rework required for *${asset.name}* (Stage: ${version.stage}).${feedbackMsg}`
       );
     }
 
-    // Slack Notification for Ops (only if not already notified as artist)
-    if (opsMember?.slackId && !isOpsAlsoArtist) {
+    // 2. OTHER STAGE REWORK -> Notify Ops Only (if not inhouse)
+    if (newStatus === "Corrections Needed" && version.stage !== 'Base input' && asset.studio !== 'Inhouse' && opsMember?.slackId) {
       await sendSlackNotification(
-        `Feedback uploaded for *${asset.name}* (${asset.studio}). Please notify the vendor.\nStage: ${version.stage}\nStatus: ${newStatus}${feedbackMsg}`,
+        `*ACTION: Notify Vendor*\nFeedback/Rework uploaded for *${asset.name}* (${asset.studio}). Please notify the vendor.\nStage: ${version.stage}\nStatus: ${newStatus}${feedbackMsg}`,
         opsMember.slackId
       );
     }
@@ -640,6 +721,7 @@ export default function AssetDetails() {
   };
 
   const handleOpenReviewModal = (version: Version, side?: 'Model' | 'Rig') => {
+    if (!isAdmin) return;
     setReviewNoteId(version.id);
     if (version.stage === 'Final Package' && side) {
       setActiveReviewSide(side);
@@ -664,6 +746,7 @@ export default function AssetDetails() {
   };
 
   const handleSaveSideReview = async (versionId: string, side: 'Model' | 'Rig', newStatus: VersionStatus) => {
+    if (!isAdmin) return;
     if (!asset) return;
 
     const version = versions.find(v => v.id === versionId);
@@ -671,14 +754,20 @@ export default function AssetDetails() {
 
     const updatePayload: any = {};
     if (side === 'Model') {
-      if (!selectedReviewerId) return alert("Select Reviewer");
+      if (!selectedReviewerId) {
+        alert("Select Model Reviewer");
+        return;
+      }
       updatePayload.reviewerModelId = selectedReviewerId;
       updatePayload.statusModel = newStatus;
       updatePayload.reviewNoteModel = reviewTextNote;
       updatePayload.reviewNoteLinkModel = reviewLink;
       updatePayload.reviewedAtModel = Date.now();
     } else {
-      if (!selectedReviewerRigId) return alert("Select Reviewer");
+      if (!selectedReviewerRigId) {
+        alert("Select Rig Reviewer");
+        return;
+      }
       updatePayload.reviewerRigId = selectedReviewerRigId;
       updatePayload.statusRig = newStatus;
       updatePayload.reviewNoteRig = reviewTextNote;
@@ -700,13 +789,22 @@ export default function AssetDetails() {
 
     await updateDoc(doc(db, "versions", versionId), updatePayload);
 
-    // Sync Asset
-    const assetUpdate: any = { updatedAt: Date.now(), reviewDueAt: null };
-    if (overallStatus === "Corrections Needed") {
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      assetUpdate.finalVersionExpectedDate = tomorrow.toISOString().split('T')[0];
+    // Determine if we should trigger Vendor Notify (if status is no longer Pending)
+    const isReviewComplete = overallStatus !== "Pending Review";
+    const assetUpdate: any = { updatedAt: Date.now() };
+    
+    if (isReviewComplete) {
+      assetUpdate.reviewDueAt = null;
+      // Start 60m timer for Ops to notify vendor
+      assetUpdate.vendorActionDueAt = asset.studio === 'Inhouse' ? null : Date.now() + (1 * 60 * 60 * 1000);
+      
+      if (overallStatus === "Corrections Needed") {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        assetUpdate.finalVersionExpectedDate = tomorrow.toISOString().split('T')[0];
+      }
     }
+
     await updateDoc(doc(db, "assets", assetId), assetUpdate);
 
     const updatedVersions = versions.map(v => 
@@ -714,13 +812,23 @@ export default function AssetDetails() {
     );
     await syncAssetStatus(updatedVersions);
 
-    // Notification
-    const opsMember = await getNextOpsMember();
-    if (opsMember?.slackId) {
-      await sendSlackNotification(
-        `Final Package ${side} Feedback uploaded for *${asset.name}*.\nStatus: ${newStatus}\nNote: ${reviewTextNote || "None"}\nLink: ${reviewLink || "None"}`,
-        opsMember.slackId
-      );
+    // Notification to Ops
+    if (isReviewComplete) {
+      const opsMember = await getNextOpsMember();
+      
+      if (asset.studio !== 'Inhouse' && opsMember?.slackId) {
+        const mNote = updatePayload.reviewNoteModel || version.reviewNoteModel || "None";
+        const mLink = updatePayload.reviewNoteLinkModel || version.reviewNoteLinkModel || "None";
+        const rNote = updatePayload.reviewNoteRig || version.reviewNoteRig || "None";
+        const rLink = updatePayload.reviewNoteLinkRig || version.reviewNoteLinkRig || "None";
+
+        const fullNotes = `\n*Model:* ${mNote}\n*Model Link:* ${mLink}\n\n*Rig:* ${rNote}\n*Rig Link:* ${rLink}`;
+        
+        await sendSlackNotification(
+          `*ACTION: Notify Vendor*\nFinal Package Review Complete for *${asset.name}* (${asset.studio}).\nStatus: ${overallStatus}${fullNotes}`,
+          opsMember.slackId
+        );
+      }
     }
 
     setReviewNoteId(null);
@@ -728,6 +836,7 @@ export default function AssetDetails() {
   };
 
   const handleApproveVersion = async (version: Version) => {
+    if (!isAdmin) return;
     const perms = getActionPermissions(version);
     if (!perms.canChangeStatus || !asset) return;
 
@@ -754,39 +863,36 @@ export default function AssetDetails() {
       assetUpdate.finalVersionExpectedDate = in2Days.toISOString().split('T')[0];
     }
 
+    const now = Date.now();
     await updateDoc(doc(db, "versions", version.id), {
       status: "Approved",
       reviewerId: reviewerId,
-      reviewNote: reviewTextNote, // Capture text note even on approval
-      reviewedAt: Date.now()
+      reviewedAt: now
     });
 
     await updateDoc(doc(db, "assets", assetId), assetUpdate);
 
     const updatedVersions = versions.map(v => 
-      v.id === version.id ? { ...v, status: "Approved" as VersionStatus, reviewerId, reviewNote: reviewTextNote } as Version : v
+      v.id === version.id ? { ...v, status: "Approved" as VersionStatus, reviewerId, reviewedAt: now } as Version : v
     );
     await syncAssetStatus(updatedVersions);
 
     // Slack Notification for Approval
     const feedbackMsg = `\nNote: ${reviewTextNote || "None"}\nLink: ${reviewLink || "None"}`;
     const opsMember = await getNextOpsMember();
-    const artistSlackIds = teamMembers
-      .filter(m => asset.assignedArtists?.includes(m.name) && m.slackId && m.active)
-      .map(m => m.slackId!);
-    const isOpsAlsoArtist = opsMember?.slackId && artistSlackIds.includes(opsMember.slackId);
-
-    if (asset.assignedArtists?.length > 0) {
+    
+    // 1. Notify Artist ONLY for Base input approval
+    if (version.stage === 'Base input' && asset.assignedArtists?.length! > 0) {
       await notifyArtistsByName(
-        asset.assignedArtists,
-        `Stage *${version.stage}* for *${asset.name}* has been Approved!${feedbackMsg}${isOpsAlsoArtist && asset.studio !== 'Inhouse' ? "\n*Action: Please notify the vendor.*" : ""}`
+        asset.assignedArtists!,
+        `Stage *${version.stage}* for *${asset.name}* has been Approved!${feedbackMsg}`
       );
     }
 
-    // Slack Notification for Ops (only if not already notified as artist)
-    if (opsMember?.slackId && !isOpsAlsoArtist) {
+    // 2. Notify Ops for ALL approvals (including Base input) if not inhouse
+    if (asset.studio !== 'Inhouse' && opsMember?.slackId) {
       await sendSlackNotification(
-        `Stage *${version.stage}* Approved for *${asset.name}* (${asset.studio}). Please notify the vendor.${feedbackMsg}`,
+        `*ACTION: Notify Vendor*\nStage *${version.stage}* Approved for *${asset.name}* (${asset.studio}). Please notify the vendor and share results.${feedbackMsg}`,
         opsMember.slackId
       );
     }
@@ -795,6 +901,53 @@ export default function AssetDetails() {
     setReviewTextNote("");
     setSelectedReviewerId("");
     fetchAssetAndVersions();
+  };
+
+  const handleMasterApproval = () => {
+    if (!isAdmin) return;
+    if (!asset) return;
+
+    setModalConfig({
+      type: "confirm",
+      title: "Grant Master Approval",
+      description: "Are you sure you want to grant MASTER APPROVAL (RM) for this character? This will lock the asset as director-approved.",
+      confirmText: "Grant RM Approval",
+      onConfirm: async () => {
+        try {
+          const now = Date.now();
+          // 1. Update Asset Status and Outcome
+          await updateDoc(doc(db, "assets", assetId), {
+            status: "RM Approved",
+            finalReviewOutcome: "RM Approved",
+            updatedAt: now
+          });
+
+          // 2. Update the latest version to RM Approved status
+          if (versions.length > 0) {
+            await updateDoc(doc(db, "versions", versions[0].id), {
+              status: "RM Approved"
+            });
+          }
+
+          // 3. Dispatch Channel-wide Notification
+          await sendSlackNotification(
+            `<!channel> 🏆 *MASTER APPROVAL GRANTED by RM*\nCharacter: *${asset.name}*\nStatus: *LOCKED & APPROVED*\nThe asset is now officially ready for production use. Congratulations to the team! 🎉`
+          );
+
+          setIsThematicModalOpen(false);
+          fetchAssetAndVersions();
+        } catch (err) {
+          console.error("Master approval failed:", err);
+          setModalConfig({
+            type: "info",
+            title: "Action Failed",
+            description: "Failed to grant master approval."
+          });
+          setIsThematicModalOpen(true);
+        }
+      }
+    });
+    setIsThematicModalOpen(true);
   };
 
   if (loading) return (
@@ -812,42 +965,13 @@ export default function AssetDetails() {
     return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
   };
 
-  const TimelineStage = ({ 
-    title, exp, uploaded, reviewed, notified, isInhouse, reviewedModel, reviewedRig, 
-    onMoveUp, onMoveDown, onDelete, isFirst, isLast 
-  }: { 
-    title: string, exp?: string, uploaded?: number, reviewed?: number, notified?: number, 
-    isInhouse: boolean, reviewedModel?: number, reviewedRig?: number,
-    onMoveUp?: () => void, onMoveDown?: () => void, onDelete?: () => void,
-    isFirst?: boolean, isLast?: boolean
-  }) => (
-    <div className="flex flex-col gap-2 p-4 rounded-2xl bg-white/[0.02] border border-white/5 relative overflow-hidden group/stage">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex flex-col gap-0.5">
-          <h4 className="text-[10px] font-black text-white uppercase tracking-widest">{title}</h4>
-          <span className="text-[8px] font-bold text-slate-500 bg-white/5 px-1.5 py-0.5 rounded border border-white/5 uppercase inline-block w-fit">
-            Exp: {exp || "—"}
-          </span>
-        </div>
-        
-        {/* Stage Management Actions */}
-        <div className="flex items-center gap-1 opacity-0 group-hover/stage:opacity-100 transition-opacity">
-          {onMoveUp && !isFirst && (
-            <button onClick={onMoveUp} className="p-1 hover:bg-white/10 rounded transition text-slate-500 hover:text-white" title="Move Left">
-              <ArrowLeft className="w-3 h-3" />
-            </button>
-          )}
-          {onMoveDown && !isLast && (
-            <button onClick={onMoveDown} className="p-1 hover:bg-white/10 rounded transition text-slate-500 hover:text-white" title="Move Right">
-              <ChevronRight className="w-3 h-3" />
-            </button>
-          )}
-          {onDelete && (
-            <button onClick={onDelete} className="p-1 hover:bg-red-500/20 rounded transition text-slate-600 hover:text-red-500" title="Delete Stage">
-              <Trash2 className="w-3 h-3" />
-            </button>
-          )}
-        </div>
+  const TimelineStage = ({ title, exp, uploaded, reviewed, notified, isInhouse, reviewedModel, reviewedRig }: { title: string, exp?: string, uploaded?: number, reviewed?: number, notified?: number, isInhouse: boolean, reviewedModel?: number, reviewedRig?: number }) => (
+    <div className="flex flex-col gap-2 p-4 rounded-2xl bg-white/[0.02] border border-white/5 relative overflow-hidden">
+      <div className="flex flex-col gap-0.5 mb-2">
+        <h4 className="text-[10px] font-black text-white uppercase tracking-widest">{title}</h4>
+        <span className="text-[8px] font-bold text-slate-500 bg-white/5 px-1.5 py-0.5 rounded border border-white/5 uppercase inline-block w-fit">
+          Exp: {exp || "—"}
+        </span>
       </div>
       <div className="space-y-3">
         <div className="flex justify-between items-center">
@@ -960,10 +1084,11 @@ export default function AssetDetails() {
       <div className="cinematic-glass rounded-3xl p-6 mb-8 relative overflow-hidden border-white/5 shadow-2xl">
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-[8px] font-bold text-orange-500 uppercase tracking-widest">{asset.type}</span>
+            <div className="flex flex-col gap-1 mb-6">
+              <h1 className="text-4xl font-black text-white tracking-tight uppercase leading-none">{asset.name}</h1>
+              <p className="text-[9px] font-bold text-slate-600 uppercase tracking-[0.3em] ml-1">Asset ID: {asset.id.slice(0, 12)}</p>
             </div>
-            <h1 className="text-3xl font-bold text-white tracking-tight uppercase mb-3">{asset.name}</h1>
+
             <div className="flex flex-wrap gap-2">
               <div className="inline-flex items-center gap-2 px-2 py-0.5 bg-white/5 rounded-full border border-white/10">
                 <div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></div>
@@ -980,30 +1105,62 @@ export default function AssetDetails() {
               )}
 
               {asset.vendorActionDueAt && Date.now() < asset.vendorActionDueAt && asset.studio !== 'Inhouse' && (
-                <div className="inline-flex items-center gap-2 px-2 py-0.5 bg-emerald-500/10 rounded-full border border-emerald-500/20">
-                  <Zap className="w-2.5 h-2.5 text-emerald-400" />
-                  <span className="text-[8px] font-black text-emerald-400 uppercase tracking-widest">
-                    Vendor Notify: {Math.ceil((asset.vendorActionDueAt - Date.now()) / (1000 * 60))}m
-                  </span>
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex items-center gap-2 px-2 py-0.5 bg-emerald-500/10 rounded-full border border-emerald-500/20">
+                    <Zap className="w-2.5 h-2.5 text-emerald-400" />
+                    <span className="text-[8px] font-black text-emerald-400 uppercase tracking-widest">
+                      Vendor Notify: {Math.ceil((asset.vendorActionDueAt - Date.now()) / (1000 * 60))}m
+                    </span>
+                  </div>
+                  {isAdmin && (
+                    <button 
+                      onClick={async () => {
+                        await updateDoc(doc(db, "assets", assetId), {
+                          vendorActionDueAt: null,
+                          vendorNotified: "Yes",
+                          vendorNotifiedDate: new Date().toISOString().split('T')[0],
+                          updatedAt: Date.now()
+                        });
+                        fetchAssetAndVersions();
+                      }}
+                      className="px-2 py-0.5 bg-emerald-600 text-white text-[8px] font-black uppercase rounded-full hover:bg-emerald-500 transition-all shadow-lg"
+                    >
+                      Clear Timer
+                    </button>
+                  )}
                 </div>
               )}
             </div>
           </div>
           
           <div className="flex items-center gap-3">
-            <button 
-              onClick={handleDeleteAsset}
-              className="p-2.5 rounded-xl bg-white/5 text-slate-500 hover:text-red-500 hover:bg-red-500/10 border border-white/10 transition-all shadow-xl"
-              title="Delete Character"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-            <button 
-              onClick={isEditing ? handleUpdateAsset : () => setIsEditing(true)}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all shadow-xl ${isEditing ? 'bg-emerald-600 text-white' : 'bg-white/5 text-slate-300 border border-white/10 hover:bg-white/10'}`}
-            >
-              {isEditing ? <><Save className="w-3.5 h-3.5" /> Save</> : <><Edit2 className="w-3.5 h-3.5" /> Edit</>}
-            </button>
+            {isAdmin && asset.status !== 'RM Approved' && (
+              <button 
+                onClick={handleMasterApproval}
+                disabled={asset.status !== 'Approved' && asset.status !== 'Final Review'}
+                className="flex items-center gap-2 px-5 py-2.5 bg-orange-600/10 text-orange-500 border border-orange-500/30 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-orange-600 hover:text-white transition-all shadow-xl disabled:opacity-30 disabled:hover:bg-orange-600/10 disabled:hover:text-orange-500"
+                title="Master Approval by Director (Rajesh Mapuskar)"
+              >
+                <CheckCircle className="w-4 h-4" /> Master Approve (RM)
+              </button>
+            )}
+            {isAdmin && (
+              <button 
+                onClick={handleDeleteAsset}
+                className="p-2.5 rounded-xl bg-white/5 text-slate-500 hover:text-red-500 hover:bg-red-500/10 border border-white/10 transition-all shadow-xl"
+                title="Delete Character"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+            {isAdmin && (
+              <button 
+                onClick={isEditing ? handleUpdateAsset : () => setIsEditing(true)}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all shadow-xl ${isEditing ? 'bg-emerald-600 text-white' : 'bg-white/5 text-slate-300 border border-white/10 hover:bg-white/10'}`}
+              >
+                {isEditing ? <><Save className="w-3.5 h-3.5" /> Save</> : <><Edit2 className="w-3.5 h-3.5" /> Edit</>}
+              </button>
+            )}
           </div>
         </div>
 
@@ -1034,37 +1191,39 @@ export default function AssetDetails() {
             </div>
             
             {/* Add Custom Stage UI */}
-            <div className="flex items-center gap-2">
-              <input 
-                id="custom-stage-input"
-                type="text"
-                placeholder="CUSTOM STAGE..."
-                className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[9px] font-bold text-white uppercase tracking-widest focus:border-orange-500 outline-none transition"
-              />
-              <button 
-                onClick={async () => {
-                  const input = document.getElementById('custom-stage-input') as HTMLInputElement;
-                  const val = input.value.trim();
-                  if (!val || !asset) return;
-                  const updatedExtras = [...(asset.extraStages || []), val];
-                  
-                  const defaultPipeline = ["Base input", "Grey scale Model(1st pass)", "Texture", "Final Package"];
-                  const currentOrder = asset.pipelineOrder || [...defaultPipeline, ...(asset.extraStages || [])];
-                  const updatedOrder = [...currentOrder, val];
+            {isAdmin === true && (
+              <div className="flex items-center gap-2">
+                <input 
+                  id="custom-stage-input"
+                  type="text"
+                  placeholder="CUSTOM STAGE..."
+                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[9px] font-bold text-white uppercase tracking-widest focus:border-orange-500 outline-none transition"
+                />
+                <button 
+                  onClick={async () => {
+                    const input = document.getElementById('custom-stage-input') as HTMLInputElement;
+                    const val = input.value.trim();
+                    if (!val) return;
+                    const updatedExtras = [...(asset.extraStages || []), val];
+                    
+                    const defaultPipeline = ["Base input", "Grey scale Model(1st pass)", "Texture", "Final Package"];
+                    const currentOrder = asset.pipelineOrder || [...defaultPipeline, ...(asset.extraStages || [])];
+                    const updatedOrder = [...currentOrder, val];
 
-                  await updateDoc(doc(db, "assets", assetId), { 
-                    extraStages: updatedExtras,
-                    pipelineOrder: updatedOrder
-                  });
-                  input.value = "";
-                  fetchAssetAndVersions();
-                }}
-                className="p-1.5 bg-orange-600/20 text-orange-500 border border-orange-500/20 rounded-lg hover:bg-orange-600 hover:text-white transition-all"
-                title="Add Extra Stage"
-              >
-                <Plus className="w-3.5 h-3.5" />
-              </button>
-            </div>
+                    await updateDoc(doc(db, "assets", assetId), { 
+                      extraStages: updatedExtras,
+                      pipelineOrder: updatedOrder
+                    });
+                    input.value = "";
+                    fetchAssetAndVersions();
+                  }}
+                  className="p-1.5 bg-orange-600/20 text-orange-500 border border-orange-500/20 rounded-lg hover:bg-orange-600 hover:text-white transition-all"
+                  title="Add Extra Stage"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
@@ -1073,21 +1232,16 @@ export default function AssetDetails() {
               const pipeline = asset.pipelineOrder || [...defaultPipeline, ...(asset.extraStages || [])];
               
               return pipeline.map((stageName, idx) => {
-                // Find versions for this stage
-                const stageVersions = versions.filter(v => v.stage === stageName);
-                const latestV = stageVersions[0];
-                const firstV = stageVersions[stageVersions.length - 1];
-
                 // Built-in field mapping
                 let exp = "";
-                let uploaded = firstV?.createdAt;
-                let reviewed = latestV?.reviewedAt;
-                let notified = undefined;
-                let reviewedModel = undefined;
-                let reviewedRig = undefined;
+                let uploaded: number | undefined = undefined;
+                let reviewed: number | undefined = undefined;
+                let notified: number | undefined = undefined;
+                let reviewedModel: number | undefined = undefined;
+                let reviewedRig: number | undefined = undefined;
 
                 if (stageName === "Base input") {
-                  exp = asset.inputExpectedDate || "";
+                  exp = asset.inputCompletedDate || "";
                   uploaded = asset.bmUploadedAt;
                   reviewed = asset.bmReviewedAt;
                   notified = asset.bmNotifiedAt;
@@ -1110,25 +1264,6 @@ export default function AssetDetails() {
                   reviewedRig = asset.finalReviewedAtRig;
                 }
 
-                const handleMove = async (direction: 'left' | 'right') => {
-                  const newOrder = [...pipeline];
-                  const targetIdx = direction === 'left' ? idx - 1 : idx + 1;
-                  [newOrder[idx], newOrder[targetIdx]] = [newOrder[targetIdx], newOrder[idx]];
-                  await updateDoc(doc(db, "assets", assetId), { pipelineOrder: newOrder });
-                  fetchAssetAndVersions();
-                };
-
-                const handleDeleteStage = async () => {
-                  if (!confirm(`Remove stage "${stageName}" from this character? This will NOT delete existing version history.`)) return;
-                  const newExtras = (asset.extraStages || []).filter(s => s !== stageName);
-                  const newOrder = pipeline.filter(s => s !== stageName);
-                  await updateDoc(doc(db, "assets", assetId), { 
-                    extraStages: newExtras,
-                    pipelineOrder: newOrder
-                  });
-                  fetchAssetAndVersions();
-                };
-
                 return (
                   <TimelineStage 
                     key={stageName}
@@ -1140,11 +1275,6 @@ export default function AssetDetails() {
                     reviewedModel={reviewedModel}
                     reviewedRig={reviewedRig}
                     isInhouse={asset.studio === 'Inhouse'}
-                    isFirst={idx === 0}
-                    isLast={idx === pipeline.length - 1}
-                    onMoveUp={() => handleMove('left')}
-                    onMoveDown={() => handleMove('right')}
-                    onDelete={!defaultPipeline.includes(stageName) ? handleDeleteStage : undefined}
                   />
                 );
               });
@@ -1181,12 +1311,16 @@ export default function AssetDetails() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               <div className="space-y-1">
                 <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Stage</label>
-                <select value={newStage} onChange={(e) => setNewStage(e.target.value as VersionStage)} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-xs font-bold outline-none focus:border-orange-500 transition">
+                <select 
+                  value={newStage} 
+                  onChange={(e) => setNewStage(e.target.value as VersionStage)} 
+                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-xs font-bold outline-none focus:border-orange-500 transition"
+                >
                   <option value="Base input" className="bg-slate-900">Base input</option>
                   <option value="Grey scale Model(1st pass)" className="bg-slate-900">Grey scale Model(1st pass)</option>
                   <option value="Texture" className="bg-slate-900">Texture</option>
                   <option value="Final Package" className="bg-slate-900">Final Package</option>
-                  {asset?.extraStages?.map(s => (
+                  {asset.extraStages?.map(s => (
                     <option key={s} value={s} className="bg-slate-900">{s}</option>
                   ))}
                 </select>
@@ -1334,7 +1468,8 @@ export default function AssetDetails() {
                           ) : version.status === 'Approved' ? (
                             <button 
                               onClick={() => handleMarkSent(version)}
-                              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest bg-orange-600 text-white hover:bg-orange-500 transition-all shadow-lg"
+                              disabled={!isAdmin}
+                              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest bg-orange-600 text-white hover:bg-orange-500 transition-all shadow-lg disabled:opacity-50"
                             >
                               <Zap className="w-2.5 h-2.5" /> Mark Sent
                             </button>
@@ -1451,13 +1586,13 @@ export default function AssetDetails() {
                                   </span>
                                 )}
                               </div>
-                              {version.reviewNoteModel && <p className="text-[9px] text-slate-300 italic">"{version.reviewNoteModel}"</p>}
+                              {version.reviewNoteModel && <p className="text-[9px] text-slate-300 italic">&quot;{version.reviewNoteModel}&quot;</p>}
                               {version.reviewNoteLinkModel && (
                                 <a href={version.reviewNoteLinkModel} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300 text-[8px] font-bold uppercase">
                                   <FileText className="w-2 h-2" /> Link
                                 </a>
                               )}
-                              {version.statusModel !== 'Approved' && (
+                              {isAdmin && version.statusModel !== 'Approved' && (
                                 <button onClick={() => handleOpenReviewModal(version, 'Model')} disabled={!perms.canChangeStatus} className="block text-blue-400 hover:text-blue-300 font-bold uppercase text-[7px] tracking-widest mt-1">
                                   {version.reviewNoteModel ? 'Update Model' : 'Add Model Feedback'}
                                 </button>
@@ -1474,13 +1609,13 @@ export default function AssetDetails() {
                                   </span>
                                 )}
                               </div>
-                              {version.reviewNoteRig && <p className="text-[9px] text-slate-300 italic">"{version.reviewNoteRig}"</p>}
+                              {version.reviewNoteRig && <p className="text-[9px] text-slate-300 italic">&quot;{version.reviewNoteRig}&quot;</p>}
                               {version.reviewNoteLinkRig && (
                                 <a href={version.reviewNoteLinkRig} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300 text-[8px] font-bold uppercase">
                                   <FileText className="w-2 h-2" /> Link
                                 </a>
                               )}
-                              {version.statusRig !== 'Approved' && (
+                              {isAdmin && version.statusRig !== 'Approved' && (
                                 <button onClick={() => handleOpenReviewModal(version, 'Rig')} disabled={!perms.canChangeStatus} className="block text-blue-400 hover:text-blue-300 font-bold uppercase text-[7px] tracking-widest mt-1">
                                   {version.reviewNoteRig ? 'Update Rig' : 'Add Rig Feedback'}
                                 </button>
@@ -1493,7 +1628,7 @@ export default function AssetDetails() {
                             {(version.reviewNote || version.reviewNoteLink) && (
                               <div className="mb-1 space-y-1">
                                 {version.reviewNote && (
-                                  <p className="text-[10px] text-slate-300 leading-tight italic break-words">"{version.reviewNote}"</p>
+                                  <p className="text-[10px] text-slate-300 leading-tight italic break-words">&quot;{version.reviewNote}&quot;</p>
                                 )}
                                 {version.reviewNoteLink && (
                                   <a href={version.reviewNoteLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-blue-400 hover:text-blue-300 font-bold uppercase text-[9px] tracking-widest">
@@ -1512,7 +1647,7 @@ export default function AssetDetails() {
                               )}
                               
                               {/* Add Feedback Button (If not Approved) */}
-                              {version.status !== 'Approved' && (
+                              {isAdmin && version.status !== 'Approved' && (
                                 <button onClick={() => handleOpenReviewModal(version)} disabled={!perms.canChangeStatus} className="text-blue-400 hover:text-blue-300 font-bold uppercase text-[8px] tracking-widest flex items-center gap-1 disabled:opacity-30 mt-1 transition-colors">
                                   <MessageSquare className="w-2.5 h-2.5" /> {version.reviewNote || version.reviewNoteLink ? 'Update Feedback' : 'Add Feedback'}
                                 </button>
@@ -1531,11 +1666,15 @@ export default function AssetDetails() {
                             </>
                           ) : (
                             <>
-                              {version.status !== "Approved" && version.stage !== 'Final Package' && perms.canChangeStatus && (
+                              {isAdmin && version.status !== "Approved" && version.stage !== 'Final Package' && perms.canChangeStatus && (
                                 <button onClick={() => handleApproveVersion(version)} title="Approve" className="p-1.5 bg-emerald-600/10 text-emerald-500 rounded-lg hover:bg-emerald-600 hover:text-white transition"><CheckCircle className="w-3.5 h-3.5" /></button>
                               )}
-                              <button onClick={() => handleStartEditVersion(version)} title="Edit" className="p-1.5 bg-white/5 text-slate-500 rounded-lg hover:text-white hover:bg-white/10 transition"><Edit2 className="w-3.5 h-3.5" /></button>
-                              <button onClick={() => handleDeleteVersion(version.id)} title="Delete" className="p-1.5 bg-red-900/10 text-red-900/50 rounded-lg hover:bg-red-600 hover:text-white transition"><Trash2 className="w-3.5 h-3.5" /></button>
+                              {isAdmin && (
+                                <button onClick={() => handleStartEditVersion(version)} title="Edit" className="p-1.5 bg-white/5 text-slate-500 rounded-lg hover:text-white hover:bg-white/10 transition"><Edit2 className="w-3.5 h-3.5" /></button>
+                              )}
+                              {isAdmin && (
+                                <button onClick={() => handleDeleteVersion(version.id)} title="Delete" className="p-1.5 bg-red-900/10 text-red-900/50 rounded-lg hover:bg-red-600 hover:text-white transition"><Trash2 className="w-3.5 h-3.5" /></button>
+                              )}
                             </>
                           )}
                         </div>
@@ -1682,7 +1821,7 @@ export default function AssetDetails() {
                 ) : (
                   <>
                     <button 
-                      onClick={() => handleAddReviewNote(reviewNoteId)} 
+                      onClick={() => handleAddReviewNote(reviewNoteId!)} 
                       className="py-2.5 bg-orange-600/20 border border-orange-500/50 text-orange-500 text-[9px] font-black uppercase tracking-widest rounded-xl hover:bg-orange-600 hover:text-white transition-all shadow-lg shadow-orange-900/10"
                     >
                       Correction
@@ -1726,6 +1865,17 @@ export default function AssetDetails() {
           </div>
         )}
       </AnimatePresence>
+
+      <ThematicModal
+        isOpen={isThematicModalOpen}
+        onClose={() => setIsThematicModalOpen(false)}
+        type={modalConfig.type}
+        title={modalConfig.title}
+        description={modalConfig.description}
+        onConfirm={modalConfig.onConfirm}
+        confirmText={modalConfig.confirmText}
+        placeholder={modalConfig.placeholder}
+      />
     </motion.div>
   );
 }

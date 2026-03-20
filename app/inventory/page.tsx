@@ -8,11 +8,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   Package, Search, Plus, ExternalLink, CheckCircle, 
   XCircle, Filter, Trash2, ArrowLeft, Loader2,
-  Box, User, Shield, Car
+  Box, User, Shield, Car, X
 } from "lucide-react";
 import Link from "next/link";
+import { useAuth } from "@/lib/AuthContext";
+import ThematicModal from "@/components/ThematicModal";
 
 export default function Inventory() {
+  const { isAdmin } = useAuth();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -23,6 +26,15 @@ export default function Inventory() {
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState<AssetType>("Character");
   const [newLink, setNewLink] = useState("");
+
+  // Thematic Modal State
+  const [isThematicModalOpen, setIsThematicModalOpen] = useState(false);
+  const [modalConfig, setModalConfig] = useState<{
+    type: "confirm" | "danger" | "info";
+    title: string;
+    description: string;
+    onConfirm?: () => void;
+  }>({ type: "info", title: "", description: "" });
 
   const fetchAssets = async () => {
     try {
@@ -44,7 +56,7 @@ export default function Inventory() {
 
   const handleAddAsset = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName) return;
+    if (!isAdmin || !newName) return;
     
     try {
       const newAsset = {
@@ -69,6 +81,7 @@ export default function Inventory() {
   };
 
   const toggleReady = async (asset: Asset) => {
+    if (!isAdmin) return;
     try {
       const newStatus = !asset.isReady;
       await updateDoc(doc(db, "assets", asset.id), { 
@@ -82,6 +95,7 @@ export default function Inventory() {
   };
 
   const updateDriveLink = async (asset: Asset, link: string) => {
+    if (!isAdmin) return;
     try {
       await updateDoc(doc(db, "assets", asset.id), { 
         masterDriveLink: link.trim(),
@@ -93,14 +107,24 @@ export default function Inventory() {
     }
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Permanently delete "${name}" from master library?`)) return;
-    try {
-      await deleteDoc(doc(db, "assets", id));
-      setAssets(prev => prev.filter(a => a.id !== id));
-    } catch (err) {
-      console.error(err);
-    }
+  const handleDelete = (id: string, name: string) => {
+    if (!isAdmin) return;
+    
+    setModalConfig({
+      type: "danger",
+      title: "Delete Asset",
+      description: `Are you sure you want to permanently delete "${name}" from the master library?`,
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, "assets", id));
+          setAssets(prev => prev.filter(a => a.id !== id));
+          setIsThematicModalOpen(false);
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    });
+    setIsThematicModalOpen(true);
   };
 
   const filteredAssets = assets.filter(a => {
@@ -134,15 +158,17 @@ export default function Inventory() {
             <h1 className="text-4xl font-black text-white uppercase tracking-tight">Master <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-red-600">Inventory</span></h1>
             <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-2">Manage all assets and mark them ready for production</p>
           </div>
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-2 px-6 py-3 bg-orange-600 text-white font-black uppercase tracking-widest text-xs rounded-2xl shadow-xl shadow-orange-900/20"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Register Asset</span>
-          </motion.button>
+          {isAdmin && (
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setIsAddModalOpen(true)}
+              className="flex items-center gap-2 px-6 py-3 bg-orange-600 text-white font-black uppercase tracking-widest text-xs rounded-2xl shadow-xl shadow-orange-900/20"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Register Asset</span>
+            </motion.button>
+          )}
         </div>
       </div>
 
@@ -225,10 +251,11 @@ export default function Inventory() {
                       <div className="flex items-center gap-3">
                         <input 
                           type="url"
-                          placeholder="ADD DRIVE LINK..."
+                          disabled={!isAdmin}
+                          placeholder={isAdmin ? "ADD DRIVE LINK..." : "NO LINK"}
                           defaultValue={asset.masterDriveLink}
                           onBlur={(e) => updateDriveLink(asset, e.target.value)}
-                          className="flex-1 bg-white/5 border border-white/5 rounded-lg px-3 py-2 text-[10px] font-bold text-slate-400 focus:text-blue-400 focus:border-blue-500/30 outline-none transition uppercase tracking-widest placeholder:text-slate-800"
+                          className="flex-1 bg-white/5 border border-white/5 rounded-lg px-3 py-2 text-[10px] font-bold text-slate-400 focus:text-blue-400 focus:border-blue-500/30 outline-none transition uppercase tracking-widest placeholder:text-slate-800 disabled:opacity-50"
                         />
                         {asset.masterDriveLink && (
                           <a href={asset.masterDriveLink} target="_blank" className="p-2 rounded-lg hover:bg-white/10 text-slate-500 hover:text-blue-400 transition-all shrink-0">
@@ -240,8 +267,9 @@ export default function Inventory() {
                     <td className="px-6 py-4">
                       <div className="flex flex-col items-center gap-1">
                         <button 
+                          disabled={!isAdmin}
                           onClick={() => toggleReady(asset)}
-                          className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${asset.isReady ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-900/40' : 'bg-white/5 text-slate-600 hover:bg-white/10'}`}
+                          className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${asset.isReady ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-900/40' : 'bg-white/5 text-slate-600 hover:bg-white/10'} disabled:opacity-50 disabled:hover:bg-white/5`}
                         >
                           {asset.isReady ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
                         </button>
@@ -249,12 +277,14 @@ export default function Inventory() {
                       </div>
                     </td>
                     <td className="px-8 py-4 text-right">
-                      <button 
-                        onClick={() => handleDelete(asset.id, asset.name)}
-                        className="p-2.5 rounded-xl text-slate-800 hover:text-red-500 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {isAdmin && (
+                        <button 
+                          onClick={() => handleDelete(asset.id, asset.name)}
+                          className="p-2.5 rounded-xl text-slate-800 hover:text-red-500 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -290,6 +320,9 @@ export default function Inventory() {
                     <p className="text-slate-500 text-[9px] font-bold tracking-[0.2em] uppercase">Add to vault library</p>
                   </div>
                 </div>
+                <button onClick={() => setIsAddModalOpen(false)} className="p-2 text-slate-500 hover:text-white transition">
+                  <X className="w-6 h-6" />
+                </button>
               </div>
 
               <form onSubmit={handleAddAsset} className="space-y-6">
@@ -356,6 +389,15 @@ export default function Inventory() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ThematicModal
+        isOpen={isThematicModalOpen}
+        onClose={() => setIsThematicModalOpen(false)}
+        type={modalConfig.type}
+        title={modalConfig.title}
+        description={modalConfig.description}
+        onConfirm={modalConfig.onConfirm}
+      />
     </div>
   );
 }
