@@ -11,8 +11,10 @@ import {
   Box, User, Shield, Car, ChevronRight
 } from "lucide-react";
 import Link from "next/link";
+import { useAuth } from "@/lib/AuthContext";
 
 export default function Inventory() {
+  const { isAdmin } = useAuth();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -153,7 +155,7 @@ export default function Inventory() {
     return (
       <Fragment key={asset.id}>
         <tr 
-          className={`group transition-all hover:bg-white/[0.02] ${asset.isReady ? 'bg-emerald-500/[0.01]' : ''} ${isVariation ? 'bg-white/[0.01]' : ''}`}
+          className={`group transition-all hover:bg-white/[0.02] ${asset.isReady ? 'bg-emerald-500/[0.01]' : ''} ${isVariation ? 'bg-indigo-500/[0.03]' : ''}`}
         >
           <td className="px-8 py-4">
             <div className="flex items-center gap-3">
@@ -165,20 +167,27 @@ export default function Inventory() {
                   <ChevronRight className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                 </button>
               )}
-              {isVariation && <div className="w-4 h-4 border-l border-b border-white/20 rounded-bl-lg ml-2 mb-2" />}
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${asset.isReady ? 'bg-emerald-500/10 text-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.15)]' : 'bg-white/5 text-slate-500'}`}>
+              {isVariation && <div className="w-4 h-4 border-l-2 border-b-2 border-indigo-500/30 rounded-bl-lg ml-2 mb-2" />}
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${asset.isReady ? (isVariation ? 'bg-indigo-500/10 text-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.15)]' : 'bg-emerald-500/10 text-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.15)]') : 'bg-white/5 text-slate-500'}`}>
                 {getTypeIcon(asset.type)}
               </div>
             </div>
           </td>
           <td className="px-6 py-4">
             <div className="flex flex-col">
-              <span className={`text-sm font-black text-white uppercase tracking-tight group-hover:text-orange-400 transition-colors ${isVariation ? 'text-slate-300' : ''}`}>
+              <span className={`text-sm font-black uppercase tracking-tight group-hover:text-orange-400 transition-colors ${isVariation ? 'text-indigo-400' : 'text-white'}`}>
                 {asset.name}
               </span>
-              <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">
-                {isVariation ? 'Variation' : 'Main Asset'} • ID: {asset.id.slice(0, 8)}
-              </span>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className={`text-[8px] font-bold uppercase tracking-widest ${isVariation ? 'text-indigo-500/60' : 'text-slate-600'}`}>
+                  {isVariation ? 'Variation' : 'Main Asset'} • ID: {asset.id.slice(0, 8)}
+                </span>
+                {isVariation && (
+                  <span className="text-[7px] font-black text-indigo-400 bg-indigo-400/10 border border-indigo-400/20 px-1.5 py-0.5 rounded-sm uppercase tracking-widest">
+                    VARIATION
+                  </span>
+                )}
+              </div>
             </div>
           </td>
           <td className="px-6 py-4">
@@ -188,10 +197,11 @@ export default function Inventory() {
             <div className="flex items-center gap-3">
               <input 
                 type="url"
-                placeholder="ADD DRIVE LINK..."
+                disabled={!isAdmin}
+                placeholder={isAdmin ? "ADD DRIVE LINK..." : "NO LINK"}
                 defaultValue={asset.masterDriveLink}
                 onBlur={(e) => updateDriveLink(asset, e.target.value)}
-                className="flex-1 bg-white/5 border border-white/5 rounded-lg px-3 py-2 text-[10px] font-bold text-slate-400 focus:text-blue-400 focus:border-blue-500/30 outline-none transition uppercase tracking-widest placeholder:text-slate-800"
+                className="flex-1 bg-white/5 border border-white/5 rounded-lg px-3 py-2 text-[10px] font-bold text-slate-400 focus:text-blue-400 focus:border-blue-500/30 outline-none transition uppercase tracking-widest placeholder:text-slate-800 disabled:opacity-50"
               />
               {asset.masterDriveLink && (
                 <a href={asset.masterDriveLink} target="_blank" className="p-2 rounded-lg hover:bg-white/10 text-slate-500 hover:text-blue-400 transition-all shrink-0">
@@ -203,8 +213,9 @@ export default function Inventory() {
           <td className="px-6 py-4">
             <div className="flex flex-col items-center gap-1">
               <button 
+                disabled={!isAdmin}
                 onClick={() => toggleReady(asset)}
-                className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${asset.isReady ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-900/40' : 'bg-white/5 text-slate-600 hover:bg-white/10'}`}
+                className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${asset.isReady ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-900/40' : 'bg-white/5 text-slate-600 hover:bg-white/10'} disabled:opacity-50 disabled:hover:bg-white/5`}
               >
                 {asset.isReady ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
               </button>
@@ -213,7 +224,7 @@ export default function Inventory() {
           </td>
           <td className="px-8 py-4 text-right">
             <div className="flex items-center justify-end gap-2">
-              {!isVariation && (
+              {isAdmin && !isVariation && (
                 <button 
                   onClick={() => {
                     setVariationParent(asset);
@@ -225,12 +236,14 @@ export default function Inventory() {
                   <Plus className="w-4 h-4" />
                 </button>
               )}
-              <button 
-                onClick={() => handleDelete(asset.id, asset.name)}
-                className="p-2.5 rounded-xl text-slate-800 hover:text-red-500 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              {isAdmin && (
+                <button 
+                  onClick={() => handleDelete(asset.id, asset.name)}
+                  className="p-2.5 rounded-xl text-slate-800 hover:text-red-500 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </td>
         </tr>
@@ -254,18 +267,20 @@ export default function Inventory() {
             <h1 className="text-4xl font-black text-white uppercase tracking-tight">Master <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-red-600">Inventory</span></h1>
             <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-2">Manage all assets and mark them ready for production</p>
           </div>
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => {
-              setVariationParent(null);
-              setIsAddModalOpen(true);
-            }}
-            className="flex items-center gap-2 px-6 py-3 bg-orange-600 text-white font-black uppercase tracking-widest text-xs rounded-2xl shadow-xl shadow-orange-900/20"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Register Asset</span>
-          </motion.button>
+          {isAdmin && (
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => {
+                setVariationParent(null);
+                setIsAddModalOpen(true);
+              }}
+              className="flex items-center gap-2 px-6 py-3 bg-orange-600 text-white font-black uppercase tracking-widest text-xs rounded-2xl shadow-xl shadow-orange-900/20"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Register Asset</span>
+            </motion.button>
+          )}
         </div>
       </div>
 
@@ -363,6 +378,9 @@ export default function Inventory() {
                     </p>
                   </div>
                 </div>
+                <button onClick={() => { setIsAddModalOpen(false); setVariationParent(null); }} className="p-2 text-slate-500 hover:text-white transition">
+                  <X className="w-6 h-6" />
+                </button>
               </div>
 
               <form onSubmit={handleAddAsset} className="space-y-6">
@@ -373,7 +391,7 @@ export default function Inventory() {
                     required 
                     value={newName} 
                     onChange={(e) => setNewName(e.target.value)} 
-                    className="w-full px-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl text-white font-bold focus:border-orange-500 outline-none transition uppercase tracking-widest" 
+                    className="w-full px-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl text-white font-bold focus:border-orange-500 outline-none transition uppercase tracking-widest placeholder:text-slate-700" 
                     placeholder={variationParent ? `E.G. ${variationParent.name}_V1` : "E.G. HANUMAN_PROPS_01"} 
                   />
                 </div>
@@ -389,7 +407,7 @@ export default function Inventory() {
                         onClick={() => setNewType(t as any)}
                         className={`py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${
                           (variationParent ? variationParent.type === t : newType === t)
-                            ? 'bg-orange-600/20 border-orange-500 text-orange-400' 
+                            ? 'bg-orange-600/20 border-orange-500 text-orange-400 shadow-lg shadow-orange-900/20' 
                             : 'bg-white/[0.03] border-white/10 text-slate-500 hover:border-white/20'
                         } ${variationParent ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
@@ -405,7 +423,7 @@ export default function Inventory() {
                     type="url" 
                     value={newLink} 
                     onChange={(e) => setNewLink(e.target.value)} 
-                    className="w-full px-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl text-white font-bold focus:border-orange-500 outline-none transition" 
+                    className="w-full px-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl text-white font-bold focus:border-orange-500 outline-none transition placeholder:text-slate-700" 
                     placeholder="https://drive.google.com/..." 
                   />
                 </div>
@@ -413,16 +431,16 @@ export default function Inventory() {
                 <div className="flex gap-3 pt-6">
                   <button
                     type="button"
-                    onClick={() => setIsAddModalOpen(false)}
-                    className="flex-1 py-4 bg-white/5 text-slate-500 font-black uppercase tracking-widest text-xs rounded-2xl hover:bg-white/10 transition-all"
+                    onClick={() => { setIsAddModalOpen(false); setVariationParent(null); }}
+                    className="flex-1 py-4 bg-white/5 text-slate-500 font-black uppercase tracking-widest text-xs rounded-2xl hover:bg-white/10 transition-all border border-white/5"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="flex-[2] py-4 bg-orange-600 text-white font-black uppercase tracking-widest text-xs rounded-2xl shadow-xl shadow-orange-900/20 transition-all"
+                    className="flex-[2] py-4 bg-orange-600 text-white font-black uppercase tracking-widest text-xs rounded-2xl shadow-xl shadow-orange-900/20 hover:bg-orange-500 transition-all active:scale-[0.98]"
                   >
-                    Add to Vault
+                    {variationParent ? 'Create Variation' : 'Add to Vault'}
                   </button>
                 </div>
               </form>
