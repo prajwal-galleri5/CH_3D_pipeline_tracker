@@ -6,6 +6,7 @@ import { db } from "@/lib/firebase";
 import { Asset, Version } from "@/types";
 import { Plus, Boxes, CheckCircle, Trash2, ChevronRight } from "lucide-react";
 import { AddAssetModal } from "@/components/AddAssetModal";
+import ThematicModal from "@/components/ThematicModal";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/AuthContext";
 
@@ -16,6 +17,15 @@ export default function Home() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [error, setError] = useState("");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  // Thematic Modal State
+  const [isThematicModalOpen, setIsThematicModalOpen] = useState(false);
+  const [modalConfig, setModalConfig] = useState<{
+    type: "confirm" | "danger" | "info";
+    title: string;
+    description: string;
+    onConfirm?: () => void;
+  }>({ type: "info", title: "", description: "" });
 
   const fetchAssets = async () => {
     setLoading(true);
@@ -60,73 +70,87 @@ export default function Home() {
     });
   };
 
-  const handleDeleteAsset = async (id: string, name: string, e: React.MouseEvent) => {
+  const handleDeleteAsset = (id: string, name: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm(`Are you sure you want to stop production for "${name}" and all its variations? This will clear all version history and reset them back to the Library.`)) return;
+    if (!isAdmin) return;
+    
+    setModalConfig({
+      type: "danger",
+      title: "Stop Production",
+      description: `Are you sure you want to stop production for "${name}" and all its variations? This will clear all version history and reset them back to the Library.`,
+      onConfirm: async () => {
+        try {
+          // 1. Find all variations of this asset
+          const variationsQuery = query(collection(db, "assets"), where("parentId", "==", id));
+          const variationsSnap = await getDocs(variationsQuery);
+          const allAssetIdsToReset = [id, ...variationsSnap.docs.map(d => d.id)];
 
-    try {
-      // 1. Find all variations of this asset
-      const variationsQuery = query(collection(db, "assets"), where("parentId", "==", id));
-      const variationsSnap = await getDocs(variationsQuery);
-      const allAssetIdsToReset = [id, ...variationsSnap.docs.map(d => d.id)];
+          // 2. Delete version history for the main asset AND all its variations
+          const deleteVersionsPromises = allAssetIdsToReset.map(async (assetId) => {
+            const q = query(collection(db, "versions"), where("assetId", "==", assetId));
+            const snap = await getDocs(q);
+            return Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+          });
+          await Promise.all(deleteVersionsPromises);
 
-      // 2. Delete version history for the main asset AND all its variations
-      const deleteVersionsPromises = allAssetIdsToReset.map(async (assetId) => {
-        const q = query(collection(db, "versions"), where("assetId", "==", assetId));
-        const snap = await getDocs(q);
-        return Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
-      });
-      await Promise.all(deleteVersionsPromises);
+          // 3. Reset all these assets in Firestore
+          const resetPromises = allAssetIdsToReset.map((assetId) => {
+            const assetRef = doc(db, "assets", assetId);
+            return updateDoc(assetRef, {
+              assignedArtists: [],
+              status: "Not Started",
+              updatedAt: Date.now(),
+              inputCompletedDate: null,
+              inputExpectedDate: null,
+              firstPassReceived: "No",
+              firstPassReceivedDate: null,
+              firstPassExpectedDate: null,
+              reviewed: "No",
+              reviewedDate: null,
+              greyScaleExpectedDate: null,
+              finalVersionReceivedDate: null,
+              finalVersionExpectedDate: null,
+              finalReviewOutcome: "",
+              bmApproved: false,
+              fpApproved: false,
+              gsApproved: false,
+              finalApproved: false,
+              reviewDueAt: null,
+              vendorActionDueAt: null,
+              vendorNotified: "No",
+              vendorNotifiedDate: null,
+              bmUploadedAt: null,
+              bmReviewedAt: null,
+              bmNotifiedAt: null,
+              fpUploadedAt: null,
+              fpReviewedAt: null,
+              fpNotifiedAt: null,
+              gsUploadedAt: null,
+              gsReviewedAt: null,
+              gsNotifiedAt: null,
+              finalUploadedAt: null,
+              finalReviewedAt: null,
+              finalReviewedAtModel: null,
+              finalReviewedAtRig: null,
+              finalNotifiedAt: null
+            });
+          });
+          await Promise.all(resetPromises);
 
-      // 3. Reset all these assets in Firestore
-      const resetPromises = allAssetIdsToReset.map((assetId) => {
-        const assetRef = doc(db, "assets", assetId);
-        return updateDoc(assetRef, {
-          assignedArtists: [],
-          status: "Not Started",
-          updatedAt: Date.now(),
-          inputCompletedDate: null,
-          inputExpectedDate: null,
-          firstPassReceived: "No",
-          firstPassReceivedDate: null,
-          firstPassExpectedDate: null,
-          reviewed: "No",
-          reviewedDate: null,
-          greyScaleExpectedDate: null,
-          finalVersionReceivedDate: null,
-          finalVersionExpectedDate: null,
-          finalReviewOutcome: "",
-          bmApproved: false,
-          fpApproved: false,
-          gsApproved: false,
-          finalApproved: false,
-          reviewDueAt: null,
-          vendorActionDueAt: null,
-          vendorNotified: "No",
-          vendorNotifiedDate: null,
-          bmUploadedAt: null,
-          bmReviewedAt: null,
-          bmNotifiedAt: null,
-          fpUploadedAt: null,
-          fpReviewedAt: null,
-          fpNotifiedAt: null,
-          gsUploadedAt: null,
-          gsReviewedAt: null,
-          gsNotifiedAt: null,
-          finalUploadedAt: null,
-          finalReviewedAt: null,
-          finalReviewedAtModel: null,
-          finalReviewedAtRig: null,
-          finalNotifiedAt: null
-        });
-      });
-      await Promise.all(resetPromises);
-
-      fetchAssets();
-    } catch (err) {
-      console.error("Multi-reset failed:", err);
-      alert("Failed to reset production task and its variations.");
-    }
+          setIsThematicModalOpen(false);
+          fetchAssets();
+        } catch (err) {
+          console.error("Multi-reset failed:", err);
+          setModalConfig({
+            type: "info",
+            title: "Error",
+            description: "Failed to reset production task and its variations."
+          });
+          setIsThematicModalOpen(true);
+        }
+      }
+    });
+    setIsThematicModalOpen(true);
   };
 
   useEffect(() => {
@@ -373,6 +397,15 @@ export default function Home() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onAssetAdded={fetchAssets}
+      />
+
+      <ThematicModal
+        isOpen={isThematicModalOpen}
+        onClose={() => setIsThematicModalOpen(false)}
+        type={modalConfig.type}
+        title={modalConfig.title}
+        description={modalConfig.description}
+        onConfirm={modalConfig.onConfirm}
       />
     </motion.div>
   );

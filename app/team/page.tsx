@@ -8,6 +8,7 @@ import { Plus, Users, Trash2, ShieldCheck, User, X, CheckCircle, AlertCircle, Ar
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
+import ThematicModal from "@/components/ThematicModal";
 
 const VERSION_STAGES: VersionStage[] = ['Base input', 'Grey scale Model(1st pass)', 'Texture', 'Final Package'];
 const EXPERTISE_OPTIONS: ReviewerExpertise[] = ['Model/Texture', 'Rig/Animation'];
@@ -26,6 +27,14 @@ export default function TeamManagement() {
   const [selectedExpertise, setSelectedExpertise] = useState<ReviewerExpertise[]>([]);
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
 
+  // Thematic Modal State
+  const [isThematicModalOpen, setIsThematicModalOpen] = useState(false);
+  const [modalConfig, setModalConfig] = useState<{
+    type: "confirm" | "danger" | "info";
+    title: string;
+    description: string;
+    onConfirm?: () => void;
+  }>({ type: "info", title: "", description: "" });
 
   const fetchData = async () => {
     setLoading(true);
@@ -88,7 +97,7 @@ export default function TeamManagement() {
 
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName || !isAdmin) return;
+    if (!isAdmin || !newName) return;
 
     try {
       const memberData: any = {
@@ -119,6 +128,7 @@ export default function TeamManagement() {
   };
 
   const handleEditClick = (member: TeamMember) => {
+    if (!isAdmin) return;
     setNewName(member.name);
     setNewSlackId(member.slackId || "");
     setNewRole(member.role);
@@ -129,15 +139,24 @@ export default function TeamManagement() {
     setShowAddModal(true);
   };
 
-  const handleDeleteMember = async (id: string) => {
+  const handleDeleteMember = (id: string, name: string) => {
     if (!isAdmin) return;
-    if (!confirm("Are you sure? This will permanently remove the member.")) return;
-    try {
-      await deleteDoc(doc(db, "team_members", id));
-      fetchData();
-    } catch (err) {
-      console.error("Error deleting member:", err);
-    }
+    
+    setModalConfig({
+      type: "danger",
+      title: "Remove Member",
+      description: `Are you sure you want to permanently remove "${name}" from the team?`,
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, "team_members", id));
+          setIsThematicModalOpen(false);
+          fetchData();
+        } catch (err) {
+          console.error("Error deleting member:", err);
+        }
+      }
+    });
+    setIsThematicModalOpen(true);
   };
 
   const toggleMemberActive = async (member: TeamMember) => {
@@ -238,7 +257,7 @@ export default function TeamManagement() {
                     <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${
                       member.role === 'Reviewer' ? 'bg-blue-500/10 text-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.1)]' : 
                       member.role === 'Ops' ? 'bg-purple-500/10 text-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.1)]' :
-                      'bg-emerald-500/10 text-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.1)]'
+                      'bg-emerald-500/10 text-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
                     }`}>
                       {member.role === 'Reviewer' ? <ShieldCheck className="w-7 h-7" /> : 
                        member.role === 'Ops' ? <Activity className="w-7 h-7" /> :
@@ -284,7 +303,7 @@ export default function TeamManagement() {
                         <CheckCircle className={`w-5 h-5 ${member.active ? 'fill-emerald-500/20' : ''}`} />
                       </button>
                       <button 
-                        onClick={() => handleDeleteMember(member.id)}
+                        onClick={() => handleDeleteMember(member.id, member.name)}
                         className="p-2 text-slate-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
                       >
                         <Trash2 className="w-5 h-5" />
@@ -474,6 +493,15 @@ export default function TeamManagement() {
           </div>
         )}
       </AnimatePresence>
+
+      <ThematicModal
+        isOpen={isThematicModalOpen}
+        onClose={() => setIsThematicModalOpen(false)}
+        type={modalConfig.type}
+        title={modalConfig.title}
+        description={modalConfig.description}
+        onConfirm={modalConfig.onConfirm}
+      />
     </motion.div>
   );
 }

@@ -10,6 +10,7 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { notifyArtistsByName, sendSlackNotification } from "@/lib/slack";
 import { useAuth } from "@/lib/AuthContext";
+import ThematicModal from "@/components/ThematicModal";
 
 export default function AssetDetailsClient() {
   const { isAdmin } = useAuth();
@@ -53,6 +54,17 @@ export default function AssetDetailsClient() {
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
   const [emailLinkInput, setEmailLinkInput] = useState("");
   const [targetVersion, setTargetVersion] = useState<Version | null>(null);
+
+  // Thematic Modal State
+  const [isThematicModalOpen, setIsThematicModalOpen] = useState(false);
+  const [modalConfig, setModalConfig] = useState<{
+    type: "confirm" | "danger" | "info" | "prompt";
+    title: string;
+    description: string;
+    onConfirm?: (val?: string) => void;
+    confirmText?: string;
+    placeholder?: string;
+  }>({ type: "info", title: "", description: "" });
 
   const fetchAssetAndVersions = async (id: string) => {
     try {
@@ -195,7 +207,7 @@ export default function AssetDetailsClient() {
 
   const handleAddVariation = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newVariationName || !asset) return;
+    if (!isAdmin || !newVariationName || !asset) return;
     
     try {
       const newVar: any = {
@@ -229,15 +241,6 @@ export default function AssetDetailsClient() {
         const isActive = m.active === true;
         const hasStages = m.reviewerStages && m.reviewerStages.includes(stage);
         
-        console.log(`Checking Member ${m.name}:`, { 
-          role: m.role, 
-          active: m.active, 
-          stages: m.reviewerStages,
-          isReviewerMatch: isReviewer,
-          isActiveMatch: isActive,
-          isStageMatch: hasStages
-        });
-
         if (!isActive || !isReviewer) return false;
         
         // Match stage
@@ -251,12 +254,7 @@ export default function AssetDetailsClient() {
       })
       .sort((a, b) => a.id.localeCompare(b.id));
 
-    console.log(`Round Robin: Found ${eligible.length} eligible reviewers:`, eligible.map(m => m.name));
-
-    if (eligible.length === 0) {
-      console.log("Round Robin: No eligible reviewers found!");
-      return null;
-    }
+    if (eligible.length === 0) return null;
 
     // 2. Query Firestore for the last assigned reviewer in this stage context
     const qv = query(
@@ -282,15 +280,11 @@ export default function AssetDetailsClient() {
         }
       }
 
-      console.log(`Round Robin: Last assigned reviewer ID was: ${lastId || 'None'}`);
-
       if (!lastId) return eligible[0];
 
       const lastIdx = eligible.findIndex(m => m.id === lastId);
       const nextIdx = (lastIdx + 1) % eligible.length;
-      const nextReviewer = eligible[nextIdx];
-      console.log(`Round Robin: Selected next reviewer: ${nextReviewer.name}`);
-      return nextReviewer;
+      return eligible[nextIdx];
     } catch (e) {
       console.warn("Firestore index for round robin might be missing.", e);
       return eligible[0];
@@ -302,18 +296,11 @@ export default function AssetDetailsClient() {
       .filter(m => m.active && m.role === 'Ops')
       .sort((a, b) => a.id.localeCompare(b.id));
 
-    console.log(`Ops Logic: Found ${eligible.length} eligible Ops members.`);
-
-    if (eligible.length === 0) {
-      console.log("Ops Logic: No active Ops members found!");
-      return null;
-    }
+    if (eligible.length === 0) return null;
 
     // Simplified rotation based on timestamp seconds
     const seconds = Math.floor(Date.now() / 1000);
-    const selected = eligible[seconds % eligible.length];
-    console.log(`Ops Logic: Selected Ops member: ${selected.name}`);
-    return selected;
+    return eligible[seconds % eligible.length];
   };
 
   // Sync main asset status based on version states
@@ -420,6 +407,7 @@ export default function AssetDetailsClient() {
   };
 
   const handleUpdateAsset = async () => {
+    if (!isAdmin) return;
     if (!assetId || !asset) return;
     try {
       const updatePayload: any = { ...editData };
@@ -470,34 +458,61 @@ export default function AssetDetailsClient() {
       fetchAssetAndVersions(assetId);
     } catch (err) {
       console.error("Update failed", err);
-      alert("Failed to save changes.");
+      setModalConfig({
+        type: "info",
+        title: "Update Failed",
+        description: "Failed to save character changes."
+      });
+      setIsThematicModalOpen(true);
     }
   };
 
-  const handleDeleteAsset = async () => {
-    if (!asset || !assetId) return;
-    const confirmName = prompt(`To delete this character, please type its name: "${asset.name}"`);
-    if (confirmName !== asset.name) {
-      if (confirmName !== null) alert("Name does not match. Deletion cancelled.");
-      return;
-    }
+  const handleDeleteAsset = () => {
+    if (!isAdmin) return;
+    if (!asset) return;
 
-    try {
-      setLoading(true);
-      // Delete versions associated with this asset
-      const qv = query(collection(db, "versions"), where("assetId", "==", assetId));
-      const versionsSnap = await getDocs(qv);
-      const deletePromises = versionsSnap.docs.map(d => deleteDoc(d.ref));
-      await Promise.all(deletePromises);
+    setModalConfig({
+      type: "prompt",
+      title: "Delete Character",
+      description: `To delete this character, please type its name: "${asset.name}"`,
+      confirmText: "Delete",
+      placeholder: asset.name,
+      onConfirm: async (confirmName) => {
+        if (confirmName !== asset.name) {
+          setModalConfig({
+            type: "info",
+            title: "Verification Failed",
+            description: "Name does not match. Deletion cancelled."
+          });
+          setIsThematicModalOpen(true);
+          return;
+        }
 
-      // Delete the asset itself
-      await deleteDoc(doc(db, "assets", assetId));
-      window.location.href = "/";
-    } catch (err) {
-      console.error("Delete failed", err);
-      alert("Failed to delete character.");
-      setLoading(false);
-    }
+        try {
+          setIsThematicModalOpen(false);
+          setLoading(true);
+          // Delete versions associated with this asset
+          const qv = query(collection(db, "versions"), where("assetId", "==", assetId));
+          const versionsSnap = await getDocs(qv);
+          const deletePromises = versionsSnap.docs.map(d => deleteDoc(d.ref));
+          await Promise.all(deletePromises);
+
+          // Delete the asset itself
+          await deleteDoc(doc(db, "assets", assetId));
+          window.location.href = "/";
+        } catch (err) {
+          console.error("Delete failed", err);
+          setModalConfig({
+            type: "info",
+            title: "Error",
+            description: "Failed to delete character."
+          });
+          setIsThematicModalOpen(true);
+          setLoading(false);
+        }
+      }
+    });
+    setIsThematicModalOpen(true);
   };
 
   const getAvailableStages = () => {
@@ -521,7 +536,12 @@ export default function AssetDetailsClient() {
     // Enforcement: Check if stage is actually available
     const availableStages = getAvailableStages();
     if (!availableStages.includes(newStage)) {
-      alert(`Cannot upload for ${newStage}. Previous stage must be cleared first.`);
+      setModalConfig({
+        type: "info",
+        title: "Stage Locked",
+        description: `Cannot upload for ${newStage}. Previous stage must be cleared first.`
+      });
+      setIsThematicModalOpen(true);
       return;
     }
 
@@ -619,6 +639,7 @@ export default function AssetDetailsClient() {
   };
 
   const handleMarkSent = async (version: Version) => {
+    if (!isAdmin) return;
     if (version.status !== 'Approved') return;
     if (!asset || !assetId) return;
     setTargetVersion(version);
@@ -677,24 +698,36 @@ export default function AssetDetailsClient() {
     }
   };
 
-  const handleDeleteVersion = async (versionId: string) => {
-    if (!confirm("Are you sure?")) return;
-    try {
-      await deleteDoc(doc(db, "versions", versionId));
-      const remainingVersions = versions.filter(v => v.id !== versionId);
-      await syncAssetStatus(remainingVersions);
-      if (assetId) fetchAssetAndVersions(assetId);
-    } catch (err) {
-      console.error("Delete failed", err);
-    }
+  const handleDeleteVersion = (versionId: string) => {
+    if (!isAdmin) return;
+    
+    setModalConfig({
+      type: "danger",
+      title: "Delete Version",
+      description: "Are you sure? This will permanently remove this version and its history.",
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, "versions", versionId));
+          const remainingVersions = versions.filter(v => v.id !== versionId);
+          await syncAssetStatus(remainingVersions);
+          setIsThematicModalOpen(false);
+          if (assetId) fetchAssetAndVersions(assetId);
+        } catch (err) {
+          console.error("Delete failed", err);
+        }
+      }
+    });
+    setIsThematicModalOpen(true);
   };
 
   const handleStartEditVersion = (version: Version) => {
+    if (!isAdmin) return;
     setEditingVersionId(version.id);
     setVersionEditData(version);
   };
 
   const handleUpdateVersion = async () => {
+    if (!isAdmin) return;
     if (!editingVersionId || !asset || !assetId) return;
     try {
       const version = versions.find(v => v.id === editingVersionId);
@@ -794,8 +827,14 @@ export default function AssetDetailsClient() {
   };
 
   const handleAddReviewNote = async (versionId: string) => {
+    if (!isAdmin) return;
     if (!selectedReviewerId || !asset || !assetId) {
-      alert("Please select a reviewer.");
+      setModalConfig({
+        type: "info",
+        title: "Reviewer Required",
+        description: "Please select a reviewer to submit feedback."
+      });
+      setIsThematicModalOpen(true);
       return;
     }
     const version = versions.find(v => v.id === versionId);
@@ -872,6 +911,7 @@ export default function AssetDetailsClient() {
   };
 
   const handleOpenReviewModal = (version: Version, side?: 'Model' | 'Rig') => {
+    if (!isAdmin) return;
     setReviewNoteId(version.id);
     if (version.stage === 'Final Package' && side) {
       setActiveReviewSide(side);
@@ -896,6 +936,7 @@ export default function AssetDetailsClient() {
   };
 
   const handleSaveSideReview = async (versionId: string, side: 'Model' | 'Rig', newStatus: VersionStatus) => {
+    if (!isAdmin) return;
     if (!asset || !assetId) return;
 
     const version = versions.find(v => v.id === versionId);
@@ -903,14 +944,20 @@ export default function AssetDetailsClient() {
 
     const updatePayload: any = {};
     if (side === 'Model') {
-      if (!selectedReviewerId) return alert("Select Reviewer");
+      if (!selectedReviewerId) {
+        alert("Select Model Reviewer");
+        return;
+      }
       updatePayload.reviewerModelId = selectedReviewerId;
       updatePayload.statusModel = newStatus;
       updatePayload.reviewNoteModel = reviewTextNote;
       updatePayload.reviewNoteLinkModel = reviewLink;
       updatePayload.reviewedAtModel = Date.now();
     } else {
-      if (!selectedReviewerRigId) return alert("Select Reviewer");
+      if (!selectedReviewerRigId) {
+        alert("Select Rig Reviewer");
+        return;
+      }
       updatePayload.reviewerRigId = selectedReviewerRigId;
       updatePayload.statusRig = newStatus;
       updatePayload.reviewNoteRig = reviewTextNote;
@@ -982,6 +1029,7 @@ export default function AssetDetailsClient() {
   };
 
   const handleApproveVersion = async (version: Version) => {
+    if (!isAdmin) return;
     const perms = getActionPermissions(version);
     if (!perms.canChangeStatus || !asset || !assetId) return;
 
@@ -1053,36 +1101,51 @@ export default function AssetDetailsClient() {
   };
 
   const handleMasterApproval = async () => {
+    if (!isAdmin) return;
     if (!asset || !assetId) return;
-    if (!confirm("Are you sure you want to grant MASTER APPROVAL (RM) for this character? This will lock the asset as director-approved.")) return;
 
-    try {
-      const now = Date.now();
-      // 1. Update Asset Status and Outcome
-      await updateDoc(doc(db, "assets", assetId), {
-        status: "RM Approved",
-        finalReviewOutcome: "RM Approved",
-        updatedAt: now
-      });
+    setModalConfig({
+      type: "confirm",
+      title: "Grant Master Approval",
+      description: "Are you sure you want to grant MASTER APPROVAL (RM) for this character? This will lock the asset as director-approved.",
+      confirmText: "Grant RM Approval",
+      onConfirm: async () => {
+        try {
+          const now = Date.now();
+          // 1. Update Asset Status and Outcome
+          await updateDoc(doc(db, "assets", assetId), {
+            status: "RM Approved",
+            finalReviewOutcome: "RM Approved",
+            updatedAt: now
+          });
 
-      // 2. Update the latest version to RM Approved status
-      if (versions.length > 0) {
-        await updateDoc(doc(db, "versions", versions[0].id), {
-          status: "RM Approved"
-        });
+          // 2. Update the latest version to RM Approved status
+          if (versions.length > 0) {
+            await updateDoc(doc(db, "versions", versions[0].id), {
+              status: "RM Approved"
+            });
+          }
+
+          // 3. Dispatch Channel-wide Notification
+          const variationContext = asset.parentId ? ` (Variation of ${parentAsset?.name || 'Main Asset'})` : '';
+          await sendSlackNotification(
+            `<!channel> 🏆 *MASTER APPROVAL GRANTED by RM*\nCharacter: *${asset.name}*${variationContext}\nStatus: *LOCKED & APPROVED*\nThe asset is now officially ready for production use. Congratulations to the team! 🎉`
+          );
+
+          setIsThematicModalOpen(false);
+          fetchAssetAndVersions(assetId);
+        } catch (err) {
+          console.error("Master approval failed:", err);
+          setModalConfig({
+            type: "info",
+            title: "Action Failed",
+            description: "Failed to grant master approval."
+          });
+          setIsThematicModalOpen(true);
+        }
       }
-
-      // 3. Dispatch Channel-wide Notification
-      const variationContext = asset.parentId ? ` (Variation of ${parentAsset?.name || 'Main Asset'})` : '';
-      await sendSlackNotification(
-        `<!channel> 🏆 *MASTER APPROVAL GRANTED by RM*\nCharacter: *${asset.name}*${variationContext}\nStatus: *LOCKED & APPROVED*\nThe asset is now officially ready for production use. Congratulations to the team! 🎉`
-      );
-
-      fetchAssetAndVersions(assetId);
-    } catch (err) {
-      console.error("Master approval failed:", err);
-      alert("Failed to grant master approval.");
-    }
+    });
+    setIsThematicModalOpen(true);
   };
 
   // Early returns MUST come after ALL hooks
@@ -1476,7 +1539,7 @@ export default function AssetDetailsClient() {
                 let reviewedRig: number | undefined = undefined;
 
                 if (stageName === "Base input") {
-                  exp = asset.inputExpectedDate || "";
+                  exp = asset.inputCompletedDate || "";
                   uploaded = asset.bmUploadedAt;
                   reviewed = asset.bmReviewedAt;
                   notified = asset.bmNotifiedAt;
@@ -1508,14 +1571,22 @@ export default function AssetDetailsClient() {
                 };
 
                 const handleDeleteStage = async () => {
-                  if (!confirm(`Remove stage "${stageName}" from this character? This will NOT delete existing version history.`)) return;
-                  const newExtras = (asset.extraStages || []).filter(s => s !== stageName);
-                  const newOrder = pipeline.filter(s => s !== stageName);
-                  await updateDoc(doc(db, "assets", assetId), { 
-                    extraStages: newExtras,
-                    pipelineOrder: newOrder
+                  setModalConfig({
+                    type: "danger",
+                    title: "Remove Stage",
+                    description: `Remove stage "${stageName}" from this character? This will NOT delete existing version history.`,
+                    onConfirm: async () => {
+                      const newExtras = (asset.extraStages || []).filter(s => s !== stageName);
+                      const newOrder = pipeline.filter(s => s !== stageName);
+                      await updateDoc(doc(db, "assets", assetId), { 
+                        extraStages: newExtras,
+                        pipelineOrder: newOrder
+                      });
+                      setIsThematicModalOpen(false);
+                      if (assetId) fetchAssetAndVersions(assetId);
+                    }
                   });
-                  if (assetId) fetchAssetAndVersions(assetId);
+                  setIsThematicModalOpen(true);
                 };
 
                 return (
@@ -1723,7 +1794,8 @@ export default function AssetDetailsClient() {
                           ) : version.status === 'Approved' ? (
                             <button 
                               onClick={() => handleMarkSent(version)}
-                              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest bg-orange-600 text-white hover:bg-orange-500 transition-all shadow-lg"
+                              disabled={!isAdmin}
+                              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest bg-orange-600 text-white hover:bg-orange-500 transition-all shadow-lg disabled:opacity-50"
                             >
                               <Zap className="w-2.5 h-2.5" /> Mark Sent
                             </button>
@@ -1846,7 +1918,7 @@ export default function AssetDetailsClient() {
                                   <FileText className="w-2 h-2" /> Link
                                 </a>
                               )}
-                              {version.statusModel !== 'Approved' && (
+                              {isAdmin && version.statusModel !== 'Approved' && (
                                 <button onClick={() => handleOpenReviewModal(version, 'Model')} disabled={!perms.canChangeStatus} className="block text-blue-400 hover:text-blue-300 font-bold uppercase text-[7px] tracking-widest mt-1">
                                   {version.reviewNoteModel ? 'Update Model' : 'Add Model Feedback'}
                                 </button>
@@ -1869,7 +1941,7 @@ export default function AssetDetailsClient() {
                                   <FileText className="w-2 h-2" /> Link
                                 </a>
                               )}
-                              {version.statusRig !== 'Approved' && (
+                              {isAdmin && version.statusRig !== 'Approved' && (
                                 <button onClick={() => handleOpenReviewModal(version, 'Rig')} disabled={!perms.canChangeStatus} className="block text-blue-400 hover:text-blue-300 font-bold uppercase text-[7px] tracking-widest mt-1">
                                   {version.reviewNoteRig ? 'Update Rig' : 'Add Rig Feedback'}
                                 </button>
@@ -1901,7 +1973,7 @@ export default function AssetDetailsClient() {
                               )}
                               
                               {/* Add Feedback Button (If not Approved) */}
-                              {version.status !== 'Approved' && (
+                              {isAdmin && version.status !== 'Approved' && (
                                 <button onClick={() => handleOpenReviewModal(version)} disabled={!perms.canChangeStatus} className="text-blue-400 hover:text-blue-300 font-bold uppercase text-[8px] tracking-widest flex items-center gap-1 disabled:opacity-30 mt-1 transition-colors">
                                   <MessageSquare className="w-2.5 h-2.5" /> {version.reviewNote || version.reviewNoteLink ? 'Update Feedback' : 'Add Feedback'}
                                 </button>
@@ -1920,7 +1992,7 @@ export default function AssetDetailsClient() {
                             </>
                           ) : (
                             <>
-                              {version.status !== "Approved" && version.stage !== 'Final Package' && perms.canChangeStatus && (
+                              {isAdmin && version.status !== "Approved" && version.stage !== 'Final Package' && perms.canChangeStatus && (
                                 <button onClick={() => handleApproveVersion(version)} title="Approve" className="p-1.5 bg-emerald-600/10 text-emerald-500 rounded-lg hover:bg-emerald-600 hover:text-white transition"><CheckCircle className="w-3.5 h-3.5" /></button>
                               )}
                               {isAdmin && (
@@ -2248,6 +2320,17 @@ export default function AssetDetailsClient() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ThematicModal
+        isOpen={isThematicModalOpen}
+        onClose={() => setIsThematicModalOpen(false)}
+        type={modalConfig.type}
+        title={modalConfig.title}
+        description={modalConfig.description}
+        onConfirm={modalConfig.onConfirm}
+        confirmText={modalConfig.confirmText}
+        placeholder={modalConfig.placeholder}
+      />
     </motion.div>
   );
 }

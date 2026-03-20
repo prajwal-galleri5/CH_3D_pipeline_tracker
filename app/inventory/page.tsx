@@ -8,10 +8,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   Package, Search, Plus, ExternalLink, CheckCircle, 
   XCircle, Filter, Trash2, ArrowLeft, Loader2,
-  Box, User, Shield, Car, ChevronRight
+  Box, User, Shield, Car, ChevronRight, X
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
+import ThematicModal from "@/components/ThematicModal";
 
 export default function Inventory() {
   const { isAdmin } = useAuth();
@@ -27,6 +28,15 @@ export default function Inventory() {
   const [newType, setNewType] = useState<AssetType>("Character");
   const [newLink, setNewLink] = useState("");
   const [variationParent, setVariationParent] = useState<Asset | null>(null);
+
+  // Thematic Modal State
+  const [isThematicModalOpen, setIsThematicModalOpen] = useState(false);
+  const [modalConfig, setModalConfig] = useState<{
+    type: "confirm" | "danger" | "info";
+    title: string;
+    description: string;
+    onConfirm?: () => void;
+  }>({ type: "info", title: "", description: "" });
 
   const fetchAssets = async () => {
     try {
@@ -48,7 +58,7 @@ export default function Inventory() {
 
   const handleAddAsset = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName) return;
+    if (!isAdmin || !newName) return;
     
     try {
       const newAsset: any = {
@@ -78,6 +88,7 @@ export default function Inventory() {
   };
 
   const toggleReady = async (asset: Asset) => {
+    if (!isAdmin) return;
     try {
       const newStatus = !asset.isReady;
       await updateDoc(doc(db, "assets", asset.id), { 
@@ -91,6 +102,7 @@ export default function Inventory() {
   };
 
   const updateDriveLink = async (asset: Asset, link: string) => {
+    if (!isAdmin) return;
     try {
       await updateDoc(doc(db, "assets", asset.id), { 
         masterDriveLink: link.trim(),
@@ -102,14 +114,24 @@ export default function Inventory() {
     }
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Permanently delete "${name}" from master library?`)) return;
-    try {
-      await deleteDoc(doc(db, "assets", id));
-      setAssets(prev => prev.filter(a => a.id !== id));
-    } catch (err) {
-      console.error(err);
-    }
+  const handleDelete = (id: string, name: string) => {
+    if (!isAdmin) return;
+    
+    setModalConfig({
+      type: "danger",
+      title: "Delete Asset",
+      description: `Are you sure you want to permanently delete "${name}" from the master library?`,
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, "assets", id));
+          setAssets(prev => prev.filter(a => a.id !== id));
+          setIsThematicModalOpen(false);
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    });
+    setIsThematicModalOpen(true);
   };
 
   const toggleExpand = (id: string) => {
@@ -345,8 +367,7 @@ export default function Inventory() {
             </table>
           </div>
         </motion.div>
-      )
-}
+      )}
 
 
       {/* Add Master Asset Modal */}
@@ -448,6 +469,15 @@ export default function Inventory() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ThematicModal
+        isOpen={isThematicModalOpen}
+        onClose={() => setIsThematicModalOpen(false)}
+        type={modalConfig.type}
+        title={modalConfig.title}
+        description={modalConfig.description}
+        onConfirm={modalConfig.onConfirm}
+      />
     </div>
   );
 }
