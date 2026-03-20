@@ -1,7 +1,25 @@
+"use client";
+
 import Link from "next/link";
-import { PackageSearch } from "lucide-react";
+import { PackageSearch, Lock, Unlock } from "lucide-react";
+import { useAuth } from "@/lib/AuthContext";
 
 export function Navbar() {
+  const { isAdmin, unlock, lock } = useAuth();
+
+  const handleAdminToggle = () => {
+    if (isAdmin) {
+      lock();
+    } else {
+      const pass = prompt("Enter Admin Password to enable modifications:");
+      if (pass) {
+        if (!unlock(pass)) {
+          alert("Incorrect password.");
+        }
+      }
+    }
+  };
+
   return (
     <nav className="border-b bg-black/50 backdrop-blur-md border-white/5 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -23,11 +41,22 @@ export function Navbar() {
             <Link href="/analytics" className="text-[10px] font-black text-slate-400 hover:text-orange-500 uppercase tracking-widest transition-colors">Analytics</Link>
             <Link href="/tasks" className="text-[10px] font-black text-slate-400 hover:text-emerald-500 uppercase tracking-widest transition-colors">Ops Log</Link>
             <Link href="/team" className="text-[10px] font-black text-slate-400 hover:text-blue-500 uppercase tracking-widest transition-colors">Team</Link>
+            
+            <button 
+              onClick={handleAdminToggle}
+              className={`p-2 rounded-lg transition-all ${isAdmin ? 'text-emerald-500 bg-emerald-500/10' : 'text-slate-600 hover:text-slate-400'}`}
+              title={isAdmin ? "Admin Mode Active" : "Unlock Admin Mode"}
+            >
+              {isAdmin ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+            </button>
+
             <div className="hidden md:flex flex-col items-end">
               <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">System Status</span>
               <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
-                <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Live Sync</span>
+                <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${isAdmin ? 'bg-emerald-500' : 'bg-orange-500'}`}></div>
+                <span className={`text-[10px] font-black uppercase tracking-widest ${isAdmin ? 'text-emerald-500' : 'text-orange-500'}`}>
+                  {isAdmin ? 'ADMIN ACCESS' : 'PROTECTED'}
+                </span>
               </div>
             </div>
           </div>

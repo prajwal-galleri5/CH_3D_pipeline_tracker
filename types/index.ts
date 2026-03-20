@@ -1,7 +1,7 @@
 export type AssetType = 'Character' | 'Prop' | 'Weapon' | 'Vehicle';
-export type AssetStatus = 'Not Started' | 'Base input' | 'Grey scale Model(1st pass)' | 'Texture' | 'Final Review' | 'Approved' | 'Completed';
+export type AssetStatus = 'Not Started' | 'Base input' | 'Grey scale Model(1st pass)' | 'Texture' | 'Final Review' | 'Approved' | 'RM Approved' | 'Completed';
 export type VersionStage = 'Base input' | 'Grey scale Model(1st pass)' | 'Texture' | 'Final Package' | string;
-export type VersionStatus = 'Pending Review' | 'Corrections Needed' | 'Approved';
+export type VersionStatus = 'Pending Review' | 'Corrections Needed' | 'Approved' | 'RM Approved';
 export type StudioName = 'Xentrix' | 'Innovative Colors' | 'Inhouse' | 'Other';
 export interface Asset {
   id: string;
@@ -42,6 +42,8 @@ export interface Asset {
   // Automation tracking
   reviewDueAt?: number;
   vendorActionDueAt?: number;
+  warningSentAt?: number; // Timestamp of when the 10m warning was sent
+  deadlineAlertSent?: boolean; // Flag if the final deadline alert was sent
   vendorNotified?: string; // "Yes" / "No"
   vendorNotifiedDate?: string;
   sendToVendor?: string; // "Yes" / "No"
@@ -110,6 +112,12 @@ export interface TeamMember {
   role: TeamRole;
   active: boolean;
   slackId?: string; // Slack User ID for tagging
+  slackEnabled?: boolean; // Individual toggle
   reviewerStages?: VersionStage[]; // Stages this reviewer is assigned to
   reviewerExpertise?: ReviewerExpertise[]; // Specialty for Final Package
+}
+
+export interface GlobalSettings {
+  id: 'app_settings';
+  slackNotificationsEnabled: boolean;
 }

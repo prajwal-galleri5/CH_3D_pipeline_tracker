@@ -1,31 +1,36 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy } from "firebase/firestore";
+import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy, setDoc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { TeamMember, TeamRole, VersionStage, ReviewerExpertise } from "@/types";
-import { Plus, Users, Trash2, ShieldCheck, User, X, CheckCircle, AlertCircle, ArrowLeft, Edit2, Activity, Zap } from "lucide-react";
+import { TeamMember, TeamRole, VersionStage, ReviewerExpertise, GlobalSettings } from "@/types";
+import { Plus, Users, Trash2, ShieldCheck, User, X, CheckCircle, AlertCircle, ArrowLeft, Edit2, Activity, Zap, Bell, BellOff, Settings } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
+import { useAuth } from "@/lib/AuthContext";
 
 const VERSION_STAGES: VersionStage[] = ['Base input', 'Grey scale Model(1st pass)', 'Texture', 'Final Package'];
 const EXPERTISE_OPTIONS: ReviewerExpertise[] = ['Model/Texture', 'Rig/Animation'];
 
 export default function TeamManagement() {
+  const { isAdmin } = useAuth();
   const [members, setMembers] = useState<TeamMember[]>([]);
+  const [globalSettings, setGlobalSettings] = useState<GlobalSettings>({ id: 'app_settings', slackNotificationsEnabled: true });
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newName, setNewName] = useState("");
   const [newSlackId, setNewSlackId] = useState("");
   const [newRole, setNewRole] = useState<TeamRole>("Artist");
+  const [newSlackEnabled, setNewSlackEnabled] = useState(true);
   const [selectedStages, setSelectedStages] = useState<VersionStage[]>([]);
   const [selectedExpertise, setSelectedExpertise] = useState<ReviewerExpertise[]>([]);
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
 
 
-  const fetchMembers = async () => {
+  const fetchData = async () => {
     setLoading(true);
     try {
+      // Fetch Members
       const q = query(collection(db, "team_members"), orderBy("name", "asc"));
       const querySnapshot = await getDocs(q);
       const fetched: TeamMember[] = [];
@@ -33,47 +38,81 @@ export default function TeamManagement() {
         fetched.push({ ...doc.data(), id: doc.id } as TeamMember);
       });
       setMembers(fetched);
+
+      // Fetch Global Settings
+      const settingsRef = doc(db, "settings", "app_settings");
+      const settingsSnap = await getDoc(settingsRef);
+      if (settingsSnap.exists()) {
+        setGlobalSettings(settingsSnap.data() as GlobalSettings);
+      } else {
+        // Initialize if missing
+        await setDoc(settingsRef, { id: 'app_settings', slackNotificationsEnabled: true });
+      }
     } catch (err) {
-      console.error("Error fetching team members:", err);
+      console.error("Error fetching data:", err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchMembers();
+    fetchData();
   }, []);
+
+  const handleGlobalSlackToggle = async () => {
+    if (!isAdmin) return;
+    try {
+      const newVal = !globalSettings.slackNotificationsEnabled;
+      await setDoc(doc(db, "settings", "app_settings"), { 
+        ...globalSettings, 
+        slackNotificationsEnabled: newVal 
+      });
+      setGlobalSettings(prev => ({ ...prev, slackNotificationsEnabled: newVal }));
+    } catch (err) {
+      console.error("Error updating global settings:", err);
+    }
+  };
+
+  const handleIndividualSlackToggle = async (member: TeamMember) => {
+    if (!isAdmin) return;
+    try {
+      const newVal = member.slackEnabled === false ? true : false;
+      await updateDoc(doc(db, "team_members", member.id), {
+        slackEnabled: newVal
+      });
+      setMembers(prev => prev.map(m => m.id === member.id ? { ...m, slackEnabled: newVal } : m));
+    } catch (err) {
+      console.error("Error updating member slack setting:", err);
+    }
+  };
 
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName) return;
+    if (!newName || !isAdmin) return;
 
     try {
-      if (editingMemberId) {
-        await updateDoc(doc(db, "team_members", editingMemberId), {
-          name: newName,
-          role: newRole,
-          slackId: newSlackId,
-          reviewerStages: newRole === 'Reviewer' ? selectedStages : [],
-          reviewerExpertise: newRole === 'Reviewer' ? selectedExpertise : [],
-        });
-      } else {
-        await addDoc(collection(db, "team_members"), {
-          name: newName,
-          role: newRole,
-          slackId: newSlackId,
-          active: true,
-          reviewerStages: newRole === 'Reviewer' ? selectedStages : [],
-          reviewerExpertise: newRole === 'Reviewer' ? selectedExpertise : [],
-        });
+      const memberData: any = {
+        name: newName.trim(),
+        role: newRole,
+        slackId: newSlackId.trim(),
+        slackEnabled: newSlackEnabled,
+        active: true,
+        updatedAt: Date.now(),
+      };
+
+      if (newRole === 'Reviewer') {
+        memberData.reviewerStages = selectedStages;
+        memberData.reviewerExpertise = selectedExpertise;
       }
-      setNewName("");
-      setNewSlackId("");
-      setSelectedStages([]);
-      setSelectedExpertise([]);
-      setEditingMemberId(null);
+
+      if (editingMemberId) {
+        await updateDoc(doc(db, "team_members", editingMemberId), memberData);
+      } else {
+        await addDoc(collection(db, "team_members"), memberData);
+      }
+
       setShowAddModal(false);
-      fetchMembers();
+      fetchData();
     } catch (err) {
       console.error("Error saving member:", err);
     }
@@ -83,6 +122,7 @@ export default function TeamManagement() {
     setNewName(member.name);
     setNewSlackId(member.slackId || "");
     setNewRole(member.role);
+    setNewSlackEnabled(member.slackEnabled !== false);
     setSelectedStages(member.reviewerStages || []);
     setSelectedExpertise(member.reviewerExpertise || []);
     setEditingMemberId(member.id);
@@ -90,21 +130,23 @@ export default function TeamManagement() {
   };
 
   const handleDeleteMember = async (id: string) => {
-    if (!confirm("Are you sure you want to remove this team member?")) return;
+    if (!isAdmin) return;
+    if (!confirm("Are you sure? This will permanently remove the member.")) return;
     try {
       await deleteDoc(doc(db, "team_members", id));
-      fetchMembers();
+      fetchData();
     } catch (err) {
       console.error("Error deleting member:", err);
     }
   };
 
   const toggleMemberActive = async (member: TeamMember) => {
+    if (!isAdmin) return;
     try {
       await updateDoc(doc(db, "team_members", member.id), {
         active: !member.active
       });
-      fetchMembers();
+      fetchData();
     } catch (err) {
       console.error("Error updating member:", err);
     }
@@ -119,7 +161,8 @@ export default function TeamManagement() {
       <Link href="/" className="inline-flex items-center text-[10px] font-bold text-slate-500 hover:text-orange-500 uppercase tracking-widest mb-6 transition-colors">
         <ArrowLeft className="w-3 h-3 mr-2" /> Back to Dashboard
       </Link>
-      <div className="flex justify-between items-end mb-12">
+      
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 gap-6">
         <div>
           <div className="flex items-center gap-2 mb-2">
             <div className="w-8 h-1 bg-orange-600 rounded-full"></div>
@@ -130,29 +173,51 @@ export default function TeamManagement() {
           </h1>
         </div>
 
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={() => {
-            setNewName("");
-            setNewSlackId("");
-            setNewRole("Artist");
-            setSelectedStages([]);
-            setSelectedExpertise([]);
-            setEditingMemberId(null);
-            setShowAddModal(true);
-          }}
-          className="flex items-center gap-2 px-6 py-3 bg-orange-600 text-white font-bold rounded-xl transition-all shadow-lg"
-        >
-          <Plus className="w-5 h-5" />
-          <span>Add Member</span>
-        </motion.button>
+        <div className="flex items-center gap-4">
+          {/* Global Slack Toggle UI */}
+          <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-2xl px-4 py-2.5">
+            <div className={`p-2 rounded-lg ${globalSettings.slackNotificationsEnabled ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
+              {globalSettings.slackNotificationsEnabled ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">Global Slack Alerts</span>
+              <button 
+                onClick={handleGlobalSlackToggle}
+                disabled={!isAdmin}
+                className={`text-[10px] font-black uppercase tracking-widest transition-colors ${!isAdmin ? 'opacity-50' : ''} ${globalSettings.slackNotificationsEnabled ? 'text-emerald-500 hover:text-emerald-400' : 'text-red-500 hover:text-red-400'}`}
+              >
+                {globalSettings.slackNotificationsEnabled ? 'SYSTEM ACTIVE' : 'SYSTEM MUTED'}
+              </button>
+            </div>
+          </div>
+
+          {isAdmin && (
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => {
+                setNewName("");
+                setNewSlackId("");
+                setNewRole("Artist");
+                setNewSlackEnabled(true);
+                setSelectedStages([]);
+                setSelectedExpertise([]);
+                setEditingMemberId(null);
+                setShowAddModal(true);
+              }}
+              className="flex items-center gap-2 px-6 py-3 bg-orange-600 text-white font-bold rounded-xl transition-all shadow-lg"
+            >
+              <Plus className="w-5 h-5" />
+              <span>Add Member</span>
+            </motion.button>
+          )}
+        </div>
       </div>
 
       {loading ? (
         <div className="flex flex-col items-center justify-center py-32 gap-4">
           <div className="w-12 h-12 border-2 border-orange-600/20 border-t-orange-600 rounded-full animate-spin"></div>
-          <span className="text-orange-500 font-bold tracking-widest text-[10px] animate-pulse">Synchronizing Team Data...</span>
+          <span className="text-orange-500 font-bold tracking-widest text-[10px] uppercase animate-pulse">Syncing Team Data...</span>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -160,79 +225,94 @@ export default function TeamManagement() {
             {members.map((member) => (
               <motion.div
                 key={member.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className={`cinematic-glass p-6 rounded-2xl border ${member.active ? 'border-white/10' : 'border-white/5 opacity-60'} group relative overflow-hidden`}
+                layout
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className={`cinematic-glass p-6 rounded-[32px] border group relative overflow-hidden transition-all ${
+                  member.active ? 'border-white/5 hover:border-orange-500/30' : 'border-red-500/10 grayscale opacity-60'
+                }`}
               >
-                <div className="flex items-start justify-between relative z-10">
+                <div className="flex justify-between items-start mb-6">
                   <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                      member.role === 'Reviewer' ? 'bg-blue-500/20 text-blue-400' : 
-                      member.role === 'Ops' ? 'bg-purple-500/20 text-purple-400' :
-                      'bg-emerald-500/20 text-emerald-400'
+                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${
+                      member.role === 'Reviewer' ? 'bg-blue-500/10 text-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.1)]' : 
+                      member.role === 'Ops' ? 'bg-purple-500/10 text-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.1)]' :
+                      'bg-emerald-500/10 text-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.1)]'
                     }`}>
-                      {member.role === 'Reviewer' ? <ShieldCheck className="w-6 h-6" /> : 
-                       member.role === 'Ops' ? <Activity className="w-6 h-6" /> :
-                       <User className="w-6 h-6" />}
+                      {member.role === 'Reviewer' ? <ShieldCheck className="w-7 h-7" /> : 
+                       member.role === 'Ops' ? <Activity className="w-7 h-7" /> :
+                       <User className="w-7 h-7" />}
                     </div>
                     <div>
-                      <h3 className="font-bold text-white text-lg">{member.name}</h3>
-                      <div className="flex flex-col gap-0.5">
-                        <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${
-                          member.role === 'Reviewer' ? 'text-blue-500' : 
-                          member.role === 'Ops' ? 'text-purple-500' :
-                          'text-emerald-500'
+                      <h3 className="text-lg font-black text-white uppercase tracking-tight leading-none mb-1">{member.name}</h3>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
+                          member.role === 'Reviewer' ? 'text-blue-400 border-blue-500/30' : 
+                          member.role === 'Ops' ? 'text-purple-400 border-purple-500/30' :
+                          'text-emerald-400 border-emerald-500/30'
                         }`}>
                           {member.role}
                         </span>
-                        {member.role === 'Reviewer' && member.reviewerStages && member.reviewerStages.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {member.reviewerStages.map(s => (
-                              <span key={s} className="px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[7px] font-bold uppercase tracking-widest">
-                                {s}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        {member.role === 'Reviewer' && member.reviewerExpertise && member.reviewerExpertise.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {member.reviewerExpertise.map(e => (
-                              <span key={e} className="px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/20 text-[7px] font-bold uppercase tracking-widest">
-                                {e}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        {member.slackId && (
-                          <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mt-1">
-                            Slack: {member.slackId}
-                          </span>
-                        )}
+                        
+                        {/* Individual Slack Status */}
+                        <button 
+                          onClick={() => handleIndividualSlackToggle(member)}
+                          disabled={!isAdmin}
+                          title={member.slackEnabled === false ? "Slack Muted" : "Slack Active"}
+                          className={`p-1 rounded-md transition-colors ${!isAdmin ? 'cursor-default' : 'hover:bg-white/10'} ${member.slackEnabled === false ? 'text-red-500' : 'text-emerald-500'}`}
+                        >
+                          {member.slackEnabled === false ? <BellOff className="w-3 h-3" /> : <Bell className="w-3 h-3" />}
+                        </button>
                       </div>
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={() => handleEditClick(member)}
-                      className="p-2 text-slate-500 hover:text-orange-500 hover:bg-orange-500/10 rounded-lg transition-colors"
-                      title="Edit Member"
-                    >
-                      <Edit2 className="w-5 h-5" />
-                    </button>
-                    <button 
-                      onClick={() => toggleMemberActive(member)}
-                      className={`p-2 rounded-lg transition-colors ${member.active ? 'text-emerald-500 hover:bg-emerald-500/10' : 'text-slate-500 hover:bg-slate-500/10'}`}
-                    >
-                      <CheckCircle className={`w-5 h-5 ${member.active ? 'fill-emerald-500/20' : ''}`} />
-                    </button>
-                    <button 
-                      onClick={() => handleDeleteMember(member.id)}
-                      className="p-2 text-slate-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
+                  {isAdmin && (
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => handleEditClick(member)}
+                        className="p-2 text-slate-500 hover:text-orange-500 hover:bg-orange-500/10 rounded-lg transition-colors"
+                        title="Edit Member"
+                      >
+                        <Edit2 className="w-5 h-5" />
+                      </button>
+                      <button 
+                        onClick={() => toggleMemberActive(member)}
+                        className={`p-2 rounded-lg transition-colors ${member.active ? 'text-emerald-500 hover:bg-emerald-500/10' : 'text-slate-500 hover:bg-slate-500/10'}`}
+                      >
+                        <CheckCircle className={`w-5 h-5 ${member.active ? 'fill-emerald-500/20' : ''}`} />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteMember(member.id)}
+                        className="p-2 text-slate-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest">Capabilities</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {member.role === 'Artist' ? (
+                        <span className="text-[9px] font-bold text-slate-400 bg-white/5 px-2 py-1 rounded-lg border border-white/5 uppercase">Production Assets</span>
+                      ) : (
+                        member.reviewerStages?.map(s => (
+                          <span key={s} className="text-[9px] font-bold text-blue-400 bg-blue-500/5 px-2 py-1 rounded-lg border border-blue-500/10 uppercase">{s}</span>
+                        ))
+                      )}
+                      {member.reviewerExpertise?.map(e => (
+                        <span key={e} className="text-[9px] font-bold text-purple-400 bg-purple-500/5 px-2 py-1 rounded-lg border border-purple-500/10 uppercase">{e}</span>
+                      ))}
+                      {member.slackId && (
+                        <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest bg-white/5 px-2 py-1 rounded-lg border border-white/5">
+                          ID: {member.slackId}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -284,130 +364,108 @@ export default function TeamManagement() {
               </div>
 
               <form onSubmit={handleAddMember} className="space-y-6">
-                <div>
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Full Name</label>
-                  <input
-                    autoFocus
-                    type="text"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500/50 transition-colors"
-                    placeholder="Enter artist or reviewer name"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Full Name</label>
+                    <input
+                      autoFocus
+                      type="text"
+                      required
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500/50 transition-colors"
+                      placeholder="Enter name"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Slack Member ID</label>
+                    <input
+                      type="text"
+                      value={newSlackId}
+                      onChange={(e) => setNewSlackId(e.target.value)}
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500/50 transition-colors"
+                      placeholder="U12345678"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-3 self-end pb-3">
+                    <button
+                      type="button"
+                      onClick={() => setNewSlackEnabled(!newSlackEnabled)}
+                      className={`p-3 rounded-xl border transition-all ${newSlackEnabled ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'bg-red-500/10 border-red-500 text-red-500'}`}
+                    >
+                      {newSlackEnabled ? <Bell className="w-5 h-5" /> : <BellOff className="w-5 h-5" />}
+                    </button>
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Slack Alert</span>
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Slack User ID (Optional)</label>
-                  <input
-                    type="text"
-                    value={newSlackId}
-                    onChange={(e) => setNewSlackId(e.target.value)}
-                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500/50 transition-colors"
-                    placeholder="Example: U12345678"
-                  />
-                  <p className="mt-1.5 text-[7px] text-slate-600 font-bold uppercase tracking-widest">Find this in Slack: Profile &gt; More &gt; Copy member ID</p>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Role</label>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Core Role</label>
                   <div className="grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNewRole("Artist");
-                        setSelectedStages([]);
-                      }}
-                      className={`py-3 rounded-xl border text-[10px] font-bold transition-all ${newRole === 'Artist' ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]' : 'bg-white/[0.03] border-white/10 text-slate-400 hover:border-white/20'}`}
-                    >
-                      Artist
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNewRole("Reviewer");
-                        setSelectedStages([...VERSION_STAGES]);
-                      }}
-                      className={`py-3 rounded-xl border text-[10px] font-bold transition-all ${newRole === 'Reviewer' ? 'bg-blue-500/20 border-blue-500 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'bg-white/[0.03] border-white/10 text-slate-400 hover:border-white/20'}`}
-                    >
-                      Reviewer
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNewRole("Ops");
-                        setSelectedStages([]);
-                      }}
-                      className={`py-3 rounded-xl border text-[10px] font-bold transition-all ${newRole === 'Ops' ? 'bg-purple-500/20 border-purple-500 text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.2)]' : 'bg-white/[0.03] border-white/10 text-slate-400 hover:border-white/20'}`}
-                    >
-                      Ops
-                    </button>
+                    {['Artist', 'Reviewer', 'Ops'].map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setNewRole(r as TeamRole)}
+                        className={`py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${
+                          newRole === r ? 'bg-orange-600/20 border-orange-500 text-orange-400' : 'bg-white/5 border-white/5 text-slate-500'
+                        }`}
+                      >
+                        {r}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
                 {newRole === 'Reviewer' && (
-                  <motion.div 
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    className="space-y-3 pt-2"
-                  >
-                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Assigned Stages</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {VERSION_STAGES.map((s) => (
-                        <button
-                          key={s}
-                          type="button"
-                          onClick={() => {
-                            setSelectedStages(prev => 
-                              prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]
-                            );
-                          }}
-                          className={`px-3 py-2 rounded-xl border text-[9px] font-bold uppercase tracking-widest transition-all ${
-                            selectedStages.includes(s) 
-                              ? 'bg-blue-600/20 border-blue-500 text-blue-400' 
-                              : 'bg-white/[0.03] border-white/10 text-slate-500'
-                          }`}
-                        >
-                          {s}
-                        </button>
-                      ))}
-                    </div>
-                  </motion.div>
-                )}
+                  <>
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Assigned Review Stages</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {VERSION_STAGES.map(s => (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() => {
+                              setSelectedStages(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
+                            }}
+                            className={`py-2 px-3 rounded-lg border text-[8px] font-black uppercase text-left transition-all ${
+                              selectedStages.includes(s) ? 'bg-blue-600/20 border-blue-500 text-blue-400' : 'bg-white/5 border-white/5 text-slate-600'
+                            }`}
+                          >
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    </motion.div>
 
-                {newRole === 'Reviewer' && selectedStages.includes('Final Package') && (
-                  <motion.div 
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    className="space-y-3 pt-2"
-                  >
-                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Assigned Expertise (Final Package)</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {EXPERTISE_OPTIONS.map((e) => (
-                        <button
-                          key={e}
-                          type="button"
-                          onClick={() => {
-                            setSelectedExpertise(prev => 
-                              prev.includes(e) ? prev.filter(x => x !== e) : [...prev, e]
-                            );
-                          }}
-                          className={`px-3 py-2 rounded-xl border text-[9px] font-bold uppercase tracking-widest transition-all ${
-                            selectedExpertise.includes(e) 
-                              ? 'bg-orange-600/20 border-orange-500 text-orange-400' 
-                              : 'bg-white/[0.03] border-white/10 text-slate-500'
-                          }`}
-                        >
-                          {e}
-                        </button>
-                      ))}
-                    </div>
-                  </motion.div>
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Final Pkg Expertise</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {EXPERTISE_OPTIONS.map(e => (
+                          <button
+                            key={e}
+                            type="button"
+                            onClick={() => {
+                              setSelectedExpertise(prev => prev.includes(e) ? prev.filter(x => x !== e) : [...prev, e]);
+                            }}
+                            className={`py-2 px-3 rounded-lg border text-[8px] font-black uppercase text-left transition-all ${
+                              selectedExpertise.includes(e) ? 'bg-purple-600/20 border-purple-500 text-purple-400' : 'bg-white/5 border-white/5 text-slate-600'
+                            }`}
+                          >
+                            {e}
+                          </button>
+                        ))}
+                      </div>
+                    </motion.div>
+                  </>
                 )}
 
                 <button
                   type="submit"
-                  disabled={!newName || (newRole === 'Reviewer' && selectedStages.length === 0)}
-                  className="w-full py-4 bg-orange-600 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold rounded-2xl shadow-lg shadow-orange-900/20 transition-all active:scale-95"
+                  className="w-full py-4 bg-orange-600 text-white font-black uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-orange-900/20 hover:bg-orange-500 transition-all mt-4"
                 >
                   {editingMemberId ? 'Save Changes' : 'Confirm Addition'}
                 </button>
