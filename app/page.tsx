@@ -3,129 +3,85 @@
 import { useEffect, useState, Fragment } from "react";
 import { collection, getDocs, orderBy, query, where, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Asset, Version } from "@/types";
-import { Plus, Boxes, CheckCircle, Trash2, ChevronRight } from "lucide-react";
+import { Asset, Version, AssetStatus } from "@/types";
+import { Plus, Trash2, CheckCircle, Search, Filter, ArrowUpDown, ChevronRight, Activity, Zap, ShieldCheck, Flame } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { AddAssetModal } from "@/components/AddAssetModal";
-import { motion } from "framer-motion";
 import { useAuth } from "@/lib/AuthContext";
 
-export default function Home() {
+export default function Dashboard() {
   const { isAdmin } = useAuth();
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [versions, setVersions] = useState<Version[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchType] = useState("");
+  const [filterType, setFilterType] = useState<string>("All");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [error, setError] = useState("");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const fetchAssets = async () => {
     setLoading(true);
-    setError("");
     try {
-      if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID === "your_project_id_here") {
-        throw new Error("Please connect your Firebase project in .env.local");
-      }
-
       const q = query(collection(db, "assets"), orderBy("updatedAt", "desc"));
       const querySnapshot = await getDocs(q);
-      const allFetched: Asset[] = [];
+      const fetched: Asset[] = [];
       querySnapshot.forEach((doc) => {
-        allFetched.push({ ...doc.data(), id: doc.id } as Asset);
+        fetched.push({ ...doc.data(), id: doc.id } as Asset);
       });
-      
-      const active = allFetched.filter(a => a.assignedArtists && a.assignedArtists.length > 0);
-      setAssets(active);
-    } catch (err: any) {
+      setAssets(fetched);
+
+      const vq = query(collection(db, "versions"));
+      const vSnapshot = await getDocs(vq);
+      const vFetched: Version[] = [];
+      vSnapshot.forEach((doc) => vFetched.push({ ...doc.data(), id: doc.id } as Version));
+      setVersions(vFetched);
+    } catch (err) {
       console.error("Error fetching assets:", err);
-      setError(err.message || "Could not connect to database.");
     } finally {
       setLoading(false);
     }
   };
 
-  const mainAssets = assets.filter(a => !a.parentId);
-  const variations = assets.filter(a => a.parentId);
-
-  const getParentName = (parentId: string) => {
-    const parent = assets.find(a => a.id === parentId);
-    return parent ? parent.name : "Parent";
-  };
-
-  const toggleExpand = (id: string, e: React.MouseEvent) => {
+  const handleResetProduction = async (id: string, name: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setExpandedRows(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const handleDeleteAsset = async (id: string, name: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+    if (!isAdmin) return;
     if (!confirm(`Are you sure you want to stop production for "${name}" and all its variations? This will clear all version history and reset them back to the Library.`)) return;
 
     try {
-      // 1. Find all variations of this asset
+      setLoading(true);
       const variationsQuery = query(collection(db, "assets"), where("parentId", "==", id));
       const variationsSnap = await getDocs(variationsQuery);
       const allAssetIdsToReset = [id, ...variationsSnap.docs.map(d => d.id)];
 
-      // 2. Delete version history for the main asset AND all its variations
-      const deleteVersionsPromises = allAssetIdsToReset.map(async (assetId) => {
-        const q = query(collection(db, "versions"), where("assetId", "==", assetId));
-        const snap = await getDocs(q);
-        return Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
-      });
-      await Promise.all(deleteVersionsPromises);
+      for (const assetId of allAssetIdsToReset) {
+        const vq = query(collection(db, "versions"), where("assetId", "==", assetId));
+        const vSnap = await getDocs(vq);
+        for (const vDoc of vSnap.docs) {
+          await deleteDoc(doc(db, "versions", vDoc.id));
+        }
 
-      // 3. Reset all these assets in Firestore
-      const resetPromises = allAssetIdsToReset.map((assetId) => {
-        const assetRef = doc(db, "assets", assetId);
-        return updateDoc(assetRef, {
+        await updateDoc(doc(db, "assets", assetId), {
+          status: "Not Started" as AssetStatus,
           assignedArtists: [],
-          status: "Not Started",
-          updatedAt: Date.now(),
-          inputCompletedDate: null,
-          inputExpectedDate: null,
-          firstPassReceived: "No",
-          firstPassReceivedDate: null,
-          firstPassExpectedDate: null,
-          reviewed: "No",
-          reviewedDate: null,
-          greyScaleExpectedDate: null,
-          finalVersionReceivedDate: null,
-          finalVersionExpectedDate: null,
-          finalReviewOutcome: "",
           bmApproved: false,
           fpApproved: false,
           gsApproved: false,
           finalApproved: false,
-          reviewDueAt: null,
-          vendorActionDueAt: null,
-          vendorNotified: "No",
-          vendorNotifiedDate: null,
-          bmUploadedAt: null,
-          bmReviewedAt: null,
-          bmNotifiedAt: null,
-          fpUploadedAt: null,
-          fpReviewedAt: null,
-          fpNotifiedAt: null,
-          gsUploadedAt: null,
-          gsReviewedAt: null,
-          gsNotifiedAt: null,
-          finalUploadedAt: null,
-          finalReviewedAt: null,
-          finalReviewedAtModel: null,
-          finalReviewedAtRig: null,
-          finalNotifiedAt: null
+          inputCompletedDate: null,
+          inputExpectedDate: null,
+          firstPassExpectedDate: null,
+          greyScaleExpectedDate: null,
+          finalVersionExpectedDate: null,
+          updatedAt: Date.now()
         });
-      });
-      await Promise.all(resetPromises);
+      }
 
-      fetchAssets();
+      await fetchAssets();
     } catch (err) {
-      console.error("Multi-reset failed:", err);
-      alert("Failed to reset production task and its variations.");
+      console.error("Reset failed", err);
+      alert("Failed to reset production task.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -148,49 +104,40 @@ export default function Home() {
 
   const getLifecycleOutcome = (asset: Asset) => {
     const isRework = asset.finalReviewOutcome === "Rework";
-
     if (asset.status === "Approved" || asset.finalApproved) return { text: "Fully Approved", color: "text-emerald-400", bg: "bg-emerald-500/10" };
-    
-    if (asset.finalVersionReceivedDate) return { 
-      text: isRework ? "Final pkg rework" : "Final pkg review", 
-      color: isRework ? "text-red-400" : "text-orange-400", 
-      bg: isRework ? "bg-red-500/10" : "bg-orange-500/10" 
-    };
-    
-    if (asset.gsApproved) return { text: "Awaiting Final", color: "text-purple-400", bg: "bg-purple-500/10" };
-    if (asset.reviewed === "Yes") return { 
-      text: isRework ? "Texture rework" : "Texture review", 
-      color: isRework ? "text-red-400" : "text-purple-400", 
-      bg: isRework ? "bg-red-500/10" : "bg-purple-500/10" 
-    };
-    
-    if (asset.fpApproved) return { text: "Awaiting Texture", color: "text-cyan-400", bg: "bg-cyan-500/10" };
-    if (asset.firstPassReceived === "Yes") return { 
-      text: isRework ? "Grey scale Model(1st pass) rework" : "Grey scale Model(1st pass) review", 
-      color: isRework ? "text-red-400" : "text-cyan-400", 
-      bg: isRework ? "bg-red-500/10" : "bg-cyan-500/10" 
-    };
-    
-    if (asset.bmApproved) return { text: "Awaiting Grey scale Model(1st pass)", color: "text-blue-400", bg: "bg-blue-500/10" };
-    if (asset.inputCompletedDate) return { 
-      text: isRework ? "Base input rework" : "Base input review", 
-      color: isRework ? "text-red-400" : "text-blue-400", 
-      bg: isRework ? "bg-red-500/10" : "bg-blue-500/10" 
-    };
-    
-    return { text: "Base input Phase", color: "text-slate-500", bg: "bg-white/5" };
+    if (asset.status === "RM Approved") return { text: "Director Approved", color: "text-orange-400", bg: "bg-orange-500/10" };
+    if (isRework) return { text: "Refining", color: "text-orange-400", bg: "bg-orange-500/10" };
+    return { text: "In Progress", color: "text-blue-400", bg: "bg-blue-500/10" };
+  };
+
+  const filteredAssets = assets.filter(a => !a.parentId).filter(a => {
+    const matchesSearch = a.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesFilter = filterType === "All" || a.type === filterType;
+    return matchesSearch && matchesFilter && a.assignedArtists?.length > 0;
+  });
+
+  const variations = assets.filter(a => a.parentId);
+
+  const getParentName = (parentId: string) => {
+    const parent = assets.find(a => a.id === parentId);
+    return parent ? parent.name : "Parent";
+  };
+
+  const toggleExpand = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newSet = new Set(expandedRows);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setExpandedRows(newSet);
   };
 
   const getStatusStyle = (status: string) => {
-    switch (status) {
-      case "Not Started": return "text-slate-400 border-slate-800 bg-slate-800/20";
-      case "Base input": return "text-blue-400 border-blue-500/30 bg-blue-500/10";
-      case "Grey scale Model(1st pass)": return "text-cyan-400 border-cyan-500/30 bg-cyan-500/10";
-      case "Texture": return "text-purple-400 border-purple-500/30 bg-purple-500/10";
-      case "Final Review": return "text-orange-400 border-orange-500/30 bg-orange-500/10";
-      case "RM Approved": return "text-emerald-400 border-emerald-500/50 bg-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.4)]";
-      case "Approved": case "Completed": return "text-emerald-400 border-emerald-500/30 bg-emerald-500/10 shadow-[0_0_10px_rgba(16,185,129,0.2)]";
-      default: return "text-slate-400 border-slate-800";
+    switch(status) {
+      case 'Approved': return "text-emerald-400 border-emerald-500/20 bg-emerald-500/5";
+      case 'RM Approved': return "text-orange-400 border-orange-500/20 bg-orange-500/5 font-black";
+      case 'Final Review': return "text-orange-500 border-orange-500/20 bg-orange-500/5";
+      case 'Not Started': return "text-slate-500 border-white/5";
+      default: return "text-blue-400 border-blue-500/20 bg-blue-500/5";
     }
   };
 
@@ -201,26 +148,23 @@ export default function Home() {
     const hasVariations = children.length > 0;
     const isExpanded = expandedRows.has(asset.id);
 
-    const displayProgress = progress;
-    const displayOutcome = asset.status === 'RM Approved' ? { text: "DIRECTOR LOCKED", color: "text-emerald-400 font-black", bg: "bg-emerald-500/20 border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.3)]" } : outcome;
-
     return (
       <Fragment key={asset.id}>
         <tr 
-          className={`group cursor-pointer hover:bg-white/[0.02] transition-all relative ${asset.parentId ? 'bg-indigo-500/[0.03]' : ''}`}
+          className={`group cursor-pointer hover:bg-white/[0.03] transition-all relative ${asset.parentId ? 'bg-indigo-500/[0.03]' : ''}`}
           style={{ 
-            backgroundImage: `linear-gradient(to right, ${asset.parentId ? 'rgba(99, 102, 241, 0.05)' : 'rgba(16, 185, 129, 0.04)'} ${displayProgress}%, transparent ${displayProgress}%)`
+            backgroundImage: `linear-gradient(to right, ${asset.parentId ? 'rgba(99, 102, 241, 0.05)' : 'rgba(212, 175, 55, 0.03)'} ${progress}%, transparent ${progress}%)`
           }}
           onClick={() => window.location.href = `/assets/${asset.id}`}
         >
-          <td className="px-6 py-5 sticky left-0 bg-slate-900/95 backdrop-blur-md group-hover:bg-slate-800 transition-colors z-10 border-r border-white/5">
-            <div className="flex items-center gap-4">
+          <td className="px-6 py-5">
+            <div className="flex items-center gap-3">
               {!asset.parentId && hasVariations && (
                 <button 
                   onClick={(e) => toggleExpand(asset.id, e)}
                   className="p-1 hover:bg-white/10 rounded transition-colors text-slate-500"
                 >
-                  <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                  <ChevronRight className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                 </button>
               )}
               {asset.parentId && (
@@ -228,26 +172,22 @@ export default function Home() {
               )}
               {isAdmin && (
                 <button 
-                  onClick={(e) => handleDeleteAsset(asset.id, asset.name, e)}
-                  className="p-1.5 text-slate-700 hover:text-red-500 rounded-md transition-all opacity-0 group-hover:opacity-100"
+                  onClick={(e) => handleResetProduction(asset.id, asset.name, e)}
+                  className="p-1.5 text-slate-700 hover:text-vermillion rounded-md transition-all opacity-0 group-hover:opacity-100"
+                  title="Stop Production & Reset"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               )}
               <div className="min-w-0" title={asset.name}>
-                <div className={`font-black text-[11px] uppercase tracking-tight truncate group-hover:text-orange-400 transition-colors ${asset.parentId ? 'text-indigo-400' : 'text-white'}`}>
+                <div className={`font-black text-[11px] uppercase tracking-wider truncate group-hover:text-gold transition-colors ${asset.parentId ? 'text-indigo-400 font-bold' : 'text-white'}`}>
                   {asset.name}
                 </div>
                 <div className="flex flex-wrap items-center gap-2 mt-1">
                   <span className={`text-[7px] font-black px-1.5 py-0.5 rounded border uppercase tracking-widest ${getStatusStyle(asset.status)}`}>
                     {asset.status}
                   </span>
-                  {asset.parentId && (
-                    <span className="text-[6px] font-black text-indigo-400 bg-indigo-400/10 border border-indigo-400/20 px-1.5 py-0.5 rounded-sm uppercase tracking-widest">
-                      Variation of {getParentName(asset.parentId)}
-                    </span>
-                  )}
-                  <span className="text-[7px] font-bold text-slate-600 uppercase tabular-nums">{Math.round(displayProgress)}%</span>
+                  <span className="text-[7px] font-bold text-slate-600 uppercase tabular-nums">{Math.round(progress)}%</span>
                 </div>
               </div>
             </div>
@@ -263,10 +203,10 @@ export default function Home() {
 
           {/* Milestones */}
           {[
-            { key: 'inputCompletedDate', label: 'Done', exp: asset.inputExpectedDate, check: asset.bmApproved },
-            { key: 'firstPassReceived', label: 'Recv', exp: asset.firstPassExpectedDate, check: asset.fpApproved },
-            { key: 'reviewed', label: 'Rev', exp: asset.greyScaleExpectedDate, check: asset.gsApproved },
-            { key: 'finalVersionReceivedDate', label: 'Recv', exp: asset.finalVersionExpectedDate, check: asset.finalApproved }
+            { key: 'inputCompletedDate', label: 'Input', exp: asset.inputExpectedDate, check: asset.bmApproved },
+            { key: 'firstPassReceived', label: '1st Pass', exp: asset.firstPassExpectedDate, check: asset.fpApproved },
+            { key: 'reviewed', label: 'Texture', exp: asset.greyScaleExpectedDate, check: asset.gsApproved },
+            { key: 'finalVersionReceivedDate', label: 'Final', exp: asset.finalVersionExpectedDate, check: asset.finalApproved }
           ].map((m, i) => {
             const isUploaded = (asset as any)[m.key] === 'Yes' || !!(asset as any)[m.key];
             const isApproved = m.check;
@@ -277,23 +217,21 @@ export default function Home() {
                   {isUploaded ? (
                     <CheckCircle className={`w-4 h-4 ${isApproved ? 'text-emerald-500 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'text-orange-500'} transition-all`} />
                   ) : (
-                    <span className="text-[9px] font-mono text-slate-600 italic">
-                      {m.exp ? m.exp.split('-').slice(1).join('/') : "—"}
-                    </span>
+                    <div className="w-1.5 h-1.5 rounded-full bg-slate-800" />
                   )}
-                  <span className={`text-[7px] font-black uppercase tracking-tighter ${isApproved ? 'text-emerald-600' : isUploaded ? 'text-orange-600' : 'text-slate-500'}`}>
-                    {isApproved ? "Approved" : isUploaded ? m.label : "Awaiting"}
+                  <span className={`text-[7px] font-black uppercase tracking-tighter ${isApproved ? 'text-emerald-600' : isUploaded ? 'text-orange-600' : 'text-slate-700'}`}>
+                    {m.label}
                   </span>
                 </div>
               </td>
             );
           })}
 
-          {/* Outcome */}
-          <td className="px-6 py-5 text-center">
-            <div className={`inline-flex px-3 py-1 rounded-full border border-white/5 ${displayOutcome.bg}`}>
-              <span className={`text-[9px] font-black uppercase tracking-widest ${displayOutcome.color}`}>
-                {displayOutcome.text}
+          <td className="px-8 py-5 text-right">
+            <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full ${outcome.bg} border border-white/5`}>
+              <div className={`w-1.5 h-1.5 rounded-full ${outcome.color.replace('text-', 'bg-')} animate-pulse`} />
+              <span className={`text-[9px] font-black uppercase tracking-widest ${outcome.color}`}>
+                {outcome.text}
               </span>
             </div>
           </td>
@@ -304,75 +242,108 @@ export default function Home() {
   };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-full mx-auto px-4 py-8">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6 max-w-7xl mx-auto">
+    <motion.div 
+      initial={{ opacity: 0 }} 
+      animate={{ opacity: 1 }} 
+      className="max-w-full mx-auto px-4 py-8 pb-32"
+    >
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-6 max-w-7xl mx-auto">
         <div>
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-8 h-1 bg-orange-600 rounded-full"></div>
-            <span className="text-orange-500 font-bold uppercase tracking-[0.3em] text-[10px]">Operations</span>
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-1 bg-gradient-to-r from-saffron to-vermillion rounded-full shadow-[0_0_10px_rgba(255,153,51,0.5)]"></div>
+            <span className="text-saffron font-black uppercase tracking-[0.3em] text-[10px]">Divine Pipeline</span>
           </div>
-          <h1 className="text-4xl font-black tracking-tighter text-white leading-tight uppercase">
-            Character <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-red-600">Pipeline</span>
+          <h1 className="text-5xl font-black tracking-tighter text-white uppercase leading-none">
+            Production <span className="text-divine">Squad</span>
           </h1>
         </div>
 
-        {isAdmin && (
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-6 py-3 bg-orange-600 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all shadow-lg whitespace-nowrap shadow-orange-900/20"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Initialize Production</span>
-          </motion.button>
-        )}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative group">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-hover:text-gold transition-colors" />
+            <input 
+              type="text" 
+              placeholder="Search Assets..." 
+              value={searchTerm}
+              onChange={(e) => setSearchType(e.target.value)}
+              className="bg-white/5 border border-white/10 rounded-2xl pl-10 pr-4 py-3 text-xs font-bold text-white focus:outline-none focus:border-gold/50 transition-all w-64 placeholder:text-slate-600"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-2xl p-1">
+            {["All", "Character", "Prop", "Vehicle", "Weapon"].map(t => (
+              <button 
+                key={t}
+                onClick={() => setFilterType(t)}
+                className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${filterType === t ? 'bg-gold text-black shadow-[0_0_15px_rgba(212,175,55,0.3)]' : 'text-slate-500 hover:text-white'}`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+
+          {isAdmin && (
+            <motion.button 
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setIsModalOpen(true)}
+              className="flex items-center gap-2 px-6 py-3.5 bg-orange-600 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl shadow-[0_10px_25px_rgba(227,66,52,0.3)] hover:bg-orange-500 transition-all"
+            >
+              <Flame className="w-4 h-4" />
+              <span>Initialize</span>
+            </motion.button>
+          )}
+        </div>
       </div>
 
-      {loading ? (
-        <div className="flex flex-col items-center justify-center py-40 gap-4">
-          <div className="w-12 h-12 border-2 border-orange-600/20 border-t-orange-600 rounded-full animate-spin"></div>
-          <span className="text-orange-500 font-bold tracking-widest text-[10px] animate-pulse uppercase">Syncing...</span>
-        </div>
-      ) : assets.length === 0 ? (
-        <div className="text-center py-32 cinematic-glass rounded-3xl border border-dashed border-white/10 max-w-7xl mx-auto">
-           <Boxes className="w-16 h-16 text-slate-800 mx-auto mb-4" />
-           <p className="text-slate-500 font-bold uppercase tracking-widest">No active production tasks. Release assets from Library to start.</p>
-        </div>
-      ) : (
-        <div className="w-full">
-          <motion.div 
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            className="cinematic-glass rounded-3xl border border-white/5 shadow-2xl overflow-hidden"
-          >
-            <div className="overflow-x-auto custom-scrollbar">
-              <table className="w-full text-left border-collapse table-fixed min-w-[1200px]">
-                <thead>
-                  <tr className="bg-white/[0.03] border-b border-white/5 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
-                    <th className="px-6 py-5 w-[250px] sticky left-0 bg-slate-900/95 backdrop-blur-md z-20 border-r border-white/5">Character</th>
-                    <th className="px-6 py-5 w-[150px]">Studio</th>
-                    <th className="px-6 py-5 w-[150px]">Artist</th>
-                    <th className="px-6 py-5 text-center bg-blue-500/[0.02]">Base input</th>
-                    <th className="px-6 py-5 text-center bg-cyan-500/[0.02]">Grey scale Model(1st pass)</th>
-                    <th className="px-6 py-5 text-center bg-purple-500/[0.02]">Texture</th>
-                    <th className="px-6 py-5 text-center bg-orange-500/[0.02]">Final Pkg</th>
-                    <th className="px-6 py-5 text-center bg-emerald-500/[0.02]">Lifecycle Outcome</th>
+      <div className="max-w-7xl mx-auto">
+        <div className="epic-glass rounded-[40px] border border-white/5 overflow-hidden shadow-2xl relative ornate-border">
+          <div className="overflow-x-auto custom-scrollbar">
+            <table className="w-full text-left border-collapse min-w-[1000px]">
+              <thead>
+                <tr className="bg-white/[0.02] border-b border-white/5 text-[9px] font-black text-slate-500 uppercase tracking-[0.25em]">
+                  <th className="px-8 py-6">Identity & Progress</th>
+                  <th className="px-6 py-6">Studio</th>
+                  <th className="px-6 py-6">Guardian</th>
+                  <th className="px-6 py-6 text-center">Base</th>
+                  <th className="px-6 py-6 text-center">1st Pass</th>
+                  <th className="px-6 py-6 text-center">Texture</th>
+                  <th className="px-6 py-6 text-center">Final</th>
+                  <th className="px-8 py-6 text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {loading ? (
+                  <tr>
+                    <td colSpan={8} className="py-32 text-center">
+                      <div className="flex flex-col items-center gap-4">
+                        <div className="w-12 h-12 border-2 border-saffron/20 border-t-saffron rounded-full animate-spin"></div>
+                        <span className="text-saffron font-black tracking-[0.3em] text-[10px] uppercase animate-pulse">Consulting the Vedas...</span>
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {mainAssets.map((asset) => renderAssetRow(asset))}
-                </tbody>
-              </table>
-            </div>
-          </motion.div>
+                ) : filteredAssets.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-32 text-center">
+                      <div className="flex flex-col items-center gap-2 opacity-20">
+                        <ShieldCheck className="w-12 h-12 text-slate-500" />
+                        <span className="text-slate-500 font-black tracking-widest text-[10px] uppercase">No active legends found</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredAssets.map((asset) => renderAssetRow(asset))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      )}
+      </div>
 
-      <AddAssetModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onAssetAdded={fetchAssets}
+      <AddAssetModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        onAssetAdded={fetchAssets} 
       />
     </motion.div>
   );

@@ -1122,10 +1122,10 @@ export default function AssetDetailsClient() {
     onMoveUp?: () => void, onMoveDown?: () => void, onDelete?: () => void,
     isFirst?: boolean, isLast?: boolean
   }) => (
-    <div className="flex flex-col gap-2 p-4 rounded-2xl bg-white/[0.02] border border-white/5 relative overflow-hidden group/stage">
+    <div className="flex flex-col gap-2 p-4 rounded-2xl epic-glass border border-white/5 relative overflow-hidden group/stage">
       <div className="flex items-center justify-between mb-2">
         <div className="flex flex-col gap-0.5">
-          <h4 className="text-[10px] font-black text-white uppercase tracking-widest">{title}</h4>
+          <h4 className="text-[10px] font-black text-white uppercase tracking-widest font-serif">{title}</h4>
           <span className="text-[8px] font-bold text-slate-500 bg-white/5 px-1.5 py-0.5 rounded border border-white/5 uppercase inline-block w-fit">
             Exp: {exp || "—"}
           </span>
@@ -1260,45 +1260,47 @@ export default function AssetDetailsClient() {
         <ArrowLeft className="w-3 h-3 mr-2" /> Back to Dashboard
       </Link>
 
-      <div className="cinematic-glass rounded-3xl p-6 mb-8 relative overflow-hidden border-white/5 shadow-2xl">
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
-          <div>
-            <div className="flex flex-wrap items-center gap-3 mb-4">
+      <div className="epic-glass rounded-[40px] p-10 mb-12 relative overflow-hidden border-white/5 shadow-2xl ornate-border">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-10">
+          <div className="flex-1">
+            <div className="flex flex-wrap items-center gap-4 mb-6">
               {parentAsset && (
                 <Link 
                   href={`/assets/${parentAsset.id}`}
-                  className="flex items-center gap-2 px-3 py-1 bg-white/5 hover:bg-white/10 rounded-full border border-white/10 transition-all group"
+                  className="flex items-center gap-2 px-4 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 rounded-xl border border-indigo-500/20 transition-all group"
                 >
-                  <ArrowLeft className="w-2.5 h-2.5 text-slate-500 group-hover:text-orange-500" />
-                  <span className="text-[8px] font-black text-slate-500 group-hover:text-white uppercase tracking-widest">
-                    Parent: {parentAsset.name}
+                  <ArrowLeft className="w-3 h-3 text-indigo-400 group-hover:-translate-x-1 transition-transform" />
+                  <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">
+                    Heritage: {parentAsset.name}
                   </span>
                 </Link>
               )}
               {asset.type && (
-                <span className={`text-[8px] font-black px-3 py-1 rounded-full border uppercase tracking-widest ${asset.parentId ? 'text-indigo-400 bg-indigo-400/10 border-indigo-400/20' : 'text-orange-500 bg-orange-500/10 border-orange-500/20'}`}>
-                  {asset.type} {asset.parentId ? 'Variation' : 'Main Asset'}
+                <span className={`text-[10px] font-black px-4 py-1.5 rounded-xl border uppercase tracking-[0.2em] ${asset.parentId ? 'text-indigo-400 bg-indigo-400/10 border-indigo-400/20' : 'text-gold bg-gold/10 border-gold/20'}`}>
+                  {asset.type} {asset.parentId ? 'Variation' : 'Main Legend'}
                 </span>
               )}
             </div>
             
-            <div className="flex flex-col gap-1 mb-6">
-              <h1 className={`text-4xl font-black tracking-tight uppercase leading-none ${asset.parentId ? 'text-indigo-400' : 'text-white'}`}>{asset.name}</h1>
-              <p className="text-[9px] font-bold text-slate-600 uppercase tracking-[0.3em] ml-1">Asset ID: {asset.id.slice(0, 12)}</p>
+            <div className="flex flex-col gap-2 mb-8">
+              <h1 className={`text-7xl font-black tracking-tighter uppercase leading-none font-serif ${asset.parentId ? 'text-indigo-400' : 'text-white'}`}>
+                {asset.name} <span className="text-divine">Legend</span>
+              </h1>
+              <p className="text-[10px] font-bold text-slate-600 uppercase tracking-[0.4em] ml-1">Legacy ID: {asset.id.slice(0, 12)}</p>
             </div>
 
-            <div className="flex flex-wrap gap-3 mb-8">
+            <div className="flex flex-wrap gap-4 mb-10">
               {/* Variations Quick List */}
               {variations.length > 0 && (
-                <div className="flex items-center gap-2 pr-4 border-r border-white/10">
-                  <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Variations:</span>
-                  <div className="flex -space-x-2">
+                <div className="flex items-center gap-3 pr-6 border-r border-white/10">
+                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Aura Sync:</span>
+                  <div className="flex -space-x-3">
                     {variations.map(v => (
                       <Link 
                         key={v.id}
                         href={`/assets/${v.id}`}
                         title={v.name}
-                        className="w-6 h-6 rounded-full bg-slate-800 border-2 border-indigo-500 flex items-center justify-center text-[8px] font-black text-white hover:z-10 hover:border-orange-500 transition-all"
+                        className="w-8 h-8 rounded-xl bg-slate-900 border-2 border-indigo-500 flex items-center justify-center text-[10px] font-black text-white hover:z-10 hover:scale-110 hover:border-gold transition-all"
                       >
                         {v.name[0]}
                       </Link>
@@ -1310,35 +1312,35 @@ export default function AssetDetailsClient() {
               {isAdmin && !asset.parentId && (
                 <button 
                   onClick={() => setIsAddVariationModalOpen(true)}
-                  className="flex items-center gap-2 px-4 py-1.5 bg-white/5 hover:bg-orange-600/20 rounded-full border border-white/10 hover:border-orange-500/50 transition-all group"
+                  className="flex items-center gap-2 px-6 py-2 bg-orange-600/10 hover:bg-orange-600/20 rounded-xl border border-orange-500/20 hover:border-orange-500/50 transition-all group"
                 >
-                  <Plus className="w-3 h-3 text-slate-500 group-hover:text-orange-500" />
-                  <span className="text-[9px] font-black text-slate-500 group-hover:text-white uppercase tracking-widest">Add Variation</span>
+                  <Plus className="w-4 h-4 text-orange-500 group-hover:rotate-90 transition-transform" />
+                  <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest">Splice Variation</span>
                 </button>
               )}
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <div className="inline-flex items-center gap-2 px-2 py-0.5 bg-white/5 rounded-full border border-white/10">
-                <div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></div>
-                <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">{asset.status}</span>
+            <div className="flex flex-wrap gap-3">
+              <div className="inline-flex items-center gap-2.5 px-4 py-2 bg-white/5 rounded-2xl border border-white/10">
+                <div className="w-2 h-2 rounded-full bg-saffron divine-pulse"></div>
+                <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">{asset.status}</span>
               </div>
               
               {asset.reviewDueAt && Date.now() < asset.reviewDueAt && (
-                <div className="inline-flex items-center gap-2 px-2 py-0.5 bg-blue-500/10 rounded-full border border-blue-500/20">
-                  <Clock className="w-2.5 h-2.5 text-blue-400" />
-                  <span className="text-[8px] font-black text-blue-400 uppercase tracking-widest">
-                    Review Due: {Math.ceil((asset.reviewDueAt - Date.now()) / (1000 * 60))}m
+                <div className="inline-flex items-center gap-2.5 px-4 py-2 bg-blue-500/10 rounded-2xl border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.1)]">
+                  <Clock className="w-3.5 h-3.5 text-blue-400" />
+                  <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest">
+                    Vigilance Ends: {Math.ceil((asset.reviewDueAt - Date.now()) / (1000 * 60))}m
                   </span>
                 </div>
               )}
 
               {asset.vendorActionDueAt && Date.now() < asset.vendorActionDueAt && asset.studio !== 'Inhouse' && (
                 <div className="flex items-center gap-2">
-                  <div className="inline-flex items-center gap-2 px-2 py-0.5 bg-emerald-500/10 rounded-full border border-emerald-500/20">
-                    <Zap className="w-2.5 h-2.5 text-emerald-400" />
-                    <span className="text-[8px] font-black text-emerald-400 uppercase tracking-widest">
-                      Vendor Notify: {Math.ceil((asset.vendorActionDueAt - Date.now()) / (1000 * 60))}m
+                  <div className="inline-flex items-center gap-2.5 px-4 py-2 bg-emerald-500/10 rounded-2xl border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]">
+                    <Zap className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                    <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">
+                      Oracle Alert: {Math.ceil((asset.vendorActionDueAt - Date.now()) / (1000 * 60))}m
                     </span>
                   </div>
                   {isAdmin && (
@@ -1394,40 +1396,40 @@ export default function AssetDetailsClient() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <InfoField label="Studio" name="studio" value={isEditing ? editData.studio : asset.studio} type="select" />
-          <InfoField label="Type" name="priority" value={isEditing ? editData.priority : asset.priority} type="select" />
-          <InfoField label="Artist" name="assignedArtists" value={isEditing ? editData.assignedArtists : asset.assignedArtists?.join(", ")} />
-          <InfoField label="Master Link" name="masterDriveLink" value={isEditing ? editData.masterDriveLink : asset.masterDriveLink} />
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <InfoField label="Realm" name="studio" value={isEditing ? editData.studio : asset.studio} type="select" />
+          <InfoField label="Magnitude" name="priority" value={isEditing ? editData.priority : asset.priority} type="select" />
+          <InfoField label="Guardian" name="assignedArtists" value={isEditing ? editData.assignedArtists : asset.assignedArtists?.join(", ")} />
+          <InfoField label="Aether Link" name="masterDriveLink" value={isEditing ? editData.masterDriveLink : asset.masterDriveLink} />
         </div>
 
         {isEditing && (
-          <div className="flex justify-end mt-4">
+          <div className="flex justify-end mt-6">
             <button 
               onClick={handleUpdateAsset}
-              className="flex items-center gap-2 px-8 py-3 bg-emerald-600 text-white font-black uppercase tracking-[0.2em] text-[10px] rounded-2xl shadow-xl shadow-emerald-900/20 hover:bg-emerald-500 transition-all active:scale-[0.98]"
+              className="flex items-center gap-2 px-10 py-4 bg-emerald-600 text-white font-black uppercase tracking-[0.3em] text-[11px] rounded-2xl shadow-xl shadow-emerald-900/20 hover:bg-emerald-500 transition-all active:scale-[0.98] font-serif"
             >
-              <Save className="w-4 h-4" /> Finalize Changes
+              <Save className="w-4 h-4" /> Seal Changes
             </button>
           </div>
         )}
 
         {/* Production Timeline Box */}
-        <div className="mt-8 pt-8 border-t border-white/5">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-slate-500" />
-              <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em]">Production Pipeline Timeline</h3>
+        <div className="mt-12 pt-10 border-t border-white/5">
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-3">
+              <Activity className="w-5 h-5 text-saffron" />
+              <h3 className="text-lg font-black text-slate-400 uppercase tracking-[0.3em] font-serif">Celestial Path</h3>
             </div>
             
             {/* Add Custom Stage UI */}
             {isAdmin === true && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3 bg-white/5 p-1.5 rounded-2xl border border-white/5">
                 <input 
                   id="custom-stage-input"
                   type="text"
-                  placeholder="CUSTOM STAGE..."
-                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[9px] font-bold text-white uppercase tracking-widest focus:border-orange-500 outline-none transition"
+                  placeholder="NEW MILESTONE..."
+                  className="bg-transparent border-none rounded-lg px-4 py-2 text-[10px] font-bold text-white uppercase tracking-widest focus:ring-0 outline-none transition w-48 placeholder:text-slate-700"
                 />
                 <button 
                   onClick={async () => {
@@ -1440,23 +1442,23 @@ export default function AssetDetailsClient() {
                     const currentOrder = asset.pipelineOrder || [...defaultPipeline, ...(asset.extraStages || [])];
                     const updatedOrder = [...currentOrder, val];
 
-                    await updateDoc(doc(db, "assets", assetId), { 
+                    await updateDoc(doc(db, "assets", assetId!), { 
                       extraStages: updatedExtras,
                       pipelineOrder: updatedOrder
                     });
                     input.value = "";
                     if (assetId) fetchAssetAndVersions(assetId);
                   }}
-                  className="p-1.5 bg-orange-600/20 text-orange-500 border border-orange-500/20 rounded-lg hover:bg-orange-600 hover:text-white transition-all"
-                  title="Add Extra Stage"
+                  className="p-2 bg-saffron text-black rounded-xl hover:bg-gold transition-all shadow-lg"
+                  title="Enshrine Stage"
                 >
-                  <Plus className="w-3.5 h-3.5" />
+                  <Plus className="w-4 h-4" />
                 </button>
               </div>
             )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-6">
             {(() => {
               const defaultPipeline = ["Base input", "Grey scale Model(1st pass)", "Texture", "Final Package"];
               const pipeline = asset.pipelineOrder || [...defaultPipeline, ...(asset.extraStages || [])];
@@ -1542,19 +1544,19 @@ export default function AssetDetailsClient() {
         </div>
       </div>
 
-      <div className="flex justify-between items-center mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center border border-white/10 shadow-lg">
-            <LayoutGrid className="w-4 h-4 text-orange-500" />
+      <div className="flex justify-between items-center mb-8">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-2xl bg-white/5 flex items-center justify-center border border-white/10 shadow-xl ornate-border">
+            <LayoutGrid className="w-5 h-5 text-orange-500" />
           </div>
-          <h2 className="text-xl font-bold text-white uppercase tracking-tight">Package History</h2>
+          <h2 className="text-3xl font-black text-white uppercase tracking-tight font-serif">Package Chronicles</h2>
         </div>
         <button
           onClick={() => setShowVersionForm(!showVersionForm)}
-          className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white font-bold text-[10px] uppercase tracking-widest rounded-xl hover:bg-orange-500 transition-all shadow-lg"
+          className="flex items-center gap-2 px-6 py-3 bg-orange-600 text-white font-black text-[11px] uppercase tracking-[0.2em] rounded-2xl hover:bg-orange-500 transition-all shadow-xl shadow-orange-900/20 font-serif"
         >
-          <Plus className="w-3.5 h-3.5" />
-          New Version
+          <Plus className="w-4 h-4" />
+          Divine Upload
         </button>
       </div>
 
@@ -1565,47 +1567,47 @@ export default function AssetDetailsClient() {
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             onSubmit={handleAddVersion} 
-            className="cinematic-glass p-6 rounded-2xl mb-8 border-orange-500/20"
+            className="epic-glass p-8 rounded-3xl mb-10 border-orange-500/20 shadow-2xl relative overflow-hidden ornate-border"
           >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <div className="space-y-1">
-                <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Stage</label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Mission Stage</label>
                 <select 
                   value={newStage} 
                   onChange={(e) => setNewStage(e.target.value as VersionStage)} 
-                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-xs font-bold outline-none focus:border-orange-500 transition"
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-white text-xs font-bold outline-none focus:border-orange-500 transition"
                 >
                   {getAvailableStages().map(s => (
                     <option key={s} value={s} className="bg-slate-900">{s}</option>
                   ))}
                 </select>
               </div>
-              <div className="space-y-1">
-                <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Drive Link</label>
-                <input type="url" required value={newDriveLink} onChange={(e) => setNewDriveLink(e.target.value)} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-xs font-bold outline-none focus:border-orange-500 transition" placeholder="https://..." />
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Aether Drive Link</label>
+                <input type="url" required value={newDriveLink} onChange={(e) => setNewDriveLink(e.target.value)} className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-white text-xs font-bold outline-none focus:border-orange-500 transition placeholder:text-slate-700" placeholder="https://..." />
               </div>
             </div>
-            <div className="flex justify-end gap-3">
-              <button type="button" onClick={() => setShowVersionForm(false)} className="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase hover:text-white transition">Cancel</button>
-              <button type="submit" className="px-6 py-2 bg-orange-600 text-white font-bold text-[10px] uppercase rounded-lg shadow-lg hover:bg-orange-500 transition">Upload</button>
+            <div className="flex justify-end gap-4">
+              <button type="button" onClick={() => setShowVersionForm(false)} className="px-6 py-3 text-[11px] font-black text-slate-500 uppercase hover:text-white transition tracking-widest font-serif">Retreat</button>
+              <button type="submit" className="px-10 py-3 bg-orange-600 text-white font-black text-[11px] uppercase rounded-xl shadow-xl shadow-orange-900/20 hover:bg-orange-500 transition tracking-[0.2em] font-serif">Upload Chronicle</button>
             </div>
           </motion.form>
         )}
       </AnimatePresence>
 
-      <div className="cinematic-glass rounded-2xl border border-white/5 shadow-2xl overflow-hidden">
+      <div className="epic-glass rounded-[40px] border border-white/5 shadow-2xl overflow-hidden ornate-border">
         <div className="overflow-x-auto custom-scrollbar">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-[1100px]">
             <thead>
-              <tr className="bg-white/[0.05] border-b border-white/10 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                <th className="px-6 py-4">Stage</th>
-                <th className="px-6 py-4 text-center">Status</th>
-                {asset.studio !== 'Inhouse' && <th className="px-6 py-4 text-center">Ref Sent</th>}
-                <th className="px-6 py-4">Package Link</th>
-                {asset.studio !== 'Inhouse' && <th className="px-6 py-4 text-center">Email Ref</th>}
-                <th className="px-6 py-4">Review Notes</th>
-                <th className="px-6 py-4 text-center">Actions</th>
-                <th className="px-6 py-4 text-right">Uploaded</th>
+              <tr className="bg-white/[0.03] border-b border-white/5 text-[10px] font-black text-slate-500 uppercase tracking-[0.25em]">
+                <th className="px-8 py-6">Milestone</th>
+                <th className="px-6 py-6 text-center">Aura State</th>
+                {asset.studio !== 'Inhouse' && <th className="px-6 py-6 text-center">Dispatched</th>}
+                <th className="px-6 py-6">Package Core</th>
+                {asset.studio !== 'Inhouse' && <th className="px-6 py-6 text-center">Divine Msg</th>}
+                <th className="px-6 py-6">Veda Notes</th>
+                <th className="px-6 py-6 text-center">Decrees</th>
+                <th className="px-8 py-6 text-right">Inception</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5 text-xs">
@@ -1956,42 +1958,42 @@ export default function AssetDetailsClient() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="absolute inset-0 bg-black/60 backdrop-blur-sm" 
+                    className="absolute inset-0 bg-black/80 backdrop-blur-xl" 
                     onClick={() => setReviewNoteId(null)} 
                   />
                   <motion.div 
-                    initial={{ scale: 0.95, opacity: 0, y: 10 }}
+                    initial={{ scale: 0.95, opacity: 0, y: 20 }}
                     animate={{ scale: 1, opacity: 1, y: 0 }}
-                    exit={{ scale: 0.95, opacity: 0, y: 10 }}
-                    className="flex flex-col gap-4 p-5 bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-[400px] relative z-10"
+                    exit={{ scale: 0.95, opacity: 0, y: 20 }}
+                    className="flex flex-col gap-6 p-8 epic-glass border border-white/10 rounded-[32px] shadow-2xl w-full max-w-[450px] relative z-10 ornate-border"
                   >
-                    <div className="flex justify-between items-center mb-1">
-                      <div>
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Review Submission</span>
-                        <p className="text-[8px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">
-                          {currentVersion?.stage} {activeReviewSide ? `(${activeReviewSide} Side)` : ''}
-                        </p>
+                    <div className="flex justify-between items-center mb-2">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-saffron text-[10px] font-black uppercase tracking-[0.3em]">Decree Submission</span>
+                        <h2 className="text-xl font-bold text-white uppercase tracking-tight font-serif">
+                          {currentVersion?.stage} {activeReviewSide ? `(${activeReviewSide})` : ''}
+                        </h2>
                       </div>
-                      <button onClick={() => setReviewNoteId(null)} className="text-slate-500 hover:text-white transition">
-                        <X className="w-4 h-4" />
+                      <button onClick={() => setReviewNoteId(null)} className="p-2 text-slate-500 hover:text-white transition">
+                        <X className="w-5 h-5" />
                       </button>
                     </div>
               
-              <div className="space-y-4">
+              <div className="space-y-5">
                 {/* Standard Reviewer (non-Final Package) or Model/Texture Reviewer (Final Package) */}
                 {(!currentVersion || currentVersion.stage !== 'Final Package' || activeReviewSide === 'Model') && (
                   <div className="space-y-2">
-                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">
-                      {currentVersion?.stage === 'Final Package' ? 'Model & Texture Reviewer' : 'Lead Reviewer'}
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">
+                      {currentVersion?.stage === 'Final Package' ? 'Lead Guardian (Model)' : 'Lead Guardian'}
                     </label>
                     <div className="flex gap-2">
                       <select
                         value={selectedReviewerId}
                         disabled={modelStatus === 'Approved' && currentVersion?.statusModel === 'Approved'}
                         onChange={(e) => setSelectedReviewerId(e.target.value)}
-                        className="flex-1 bg-white/5 text-white text-xs font-bold p-2.5 rounded-xl border border-white/10 focus:border-orange-500 outline-none transition disabled:opacity-50"
+                        className="flex-1 bg-white/[0.03] text-white text-xs font-bold p-3 rounded-xl border border-white/10 focus:border-gold/50 outline-none transition disabled:opacity-50"
                       >
-                        <option value="" className="bg-slate-900">Select Reviewer</option>
+                        <option value="" className="bg-slate-900">Select Guardian</option>
                         {teamMembers.filter(m => {
                           if (!m.active || m.role !== 'Reviewer') return false;
                           const stage = currentVersion?.stage;
@@ -2010,14 +2012,14 @@ export default function AssetDetailsClient() {
                 {/* Rig & Animation Reviewer (Final Package Only) */}
                 {currentVersion?.stage === 'Final Package' && activeReviewSide === 'Rig' && (
                   <div className="space-y-2">
-                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Rig & Animation Reviewer</label>
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Lead Guardian (Rig)</label>
                     <div className="flex gap-2">
                       <select
                         value={selectedReviewerRigId}
                         onChange={(e) => setSelectedReviewerRigId(e.target.value)}
-                        className="flex-1 bg-white/5 text-white text-xs font-bold p-2.5 rounded-xl border border-white/10 focus:border-orange-500 outline-none transition"
+                        className="flex-1 bg-white/[0.03] text-white text-xs font-bold p-3 rounded-xl border border-white/10 focus:border-gold/50 outline-none transition"
                       >
-                        <option value="" className="bg-slate-900">Select Reviewer</option>
+                        <option value="" className="bg-slate-900">Select Guardian</option>
                         {teamMembers.filter(m => {
                           if (!m.active || m.role !== 'Reviewer') return false;
                           const stage = currentVersion?.stage;
@@ -2034,32 +2036,32 @@ export default function AssetDetailsClient() {
                 )}
 
                 <div className="space-y-2">
-                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Feedback & Reference</label>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Veda Feedback & Path</label>
                   <textarea 
                     value={reviewTextNote} 
                     onChange={(e) => setReviewTextNote(e.target.value)} 
-                    className="w-full bg-white/5 text-white text-xs p-3 rounded-xl border border-white/10 resize-none focus:border-orange-500 outline-none transition" 
-                    placeholder="Quick feedback note..." 
-                    rows={2}
+                    className="w-full bg-white/[0.03] text-white text-xs p-4 rounded-xl border border-white/10 resize-none focus:border-gold/50 outline-none transition placeholder:text-slate-700" 
+                    placeholder="Enter the divine feedback..." 
+                    rows={3}
                   />
                   <input 
                     type="url" 
                     value={reviewLink} 
                     onChange={(e) => setReviewLink(e.target.value)} 
-                    className="w-full bg-white/5 text-white text-[10px] p-2.5 rounded-xl border border-white/10 focus:border-orange-500 outline-none transition" 
-                    placeholder="Review Note Link" 
+                    className="w-full bg-white/[0.03] text-white text-[11px] p-3 rounded-xl border border-white/10 focus:border-gold/50 outline-none transition placeholder:text-slate-700" 
+                    placeholder="Reference Aether Link" 
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 mt-4">
+              <div className="grid grid-cols-2 gap-3 mt-4">
                 {currentVersion?.stage === 'Final Package' ? (
                   <>
                     <button
                       onClick={() => {
                         if (activeReviewSide) handleSaveSideReview(reviewNoteId!, activeReviewSide, 'Corrections Needed');
                       }}
-                      className="py-3 bg-white/5 text-slate-500 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-orange-500/10 hover:text-orange-500 transition-all border border-white/10"
+                      className="py-4 bg-white/5 text-slate-500 text-[10px] font-black uppercase tracking-widest rounded-2xl hover:bg-orange-600/10 hover:text-orange-500 transition-all border border-white/5 font-serif"
                     >
                       Rework {activeReviewSide}
                     </button>
@@ -2067,7 +2069,7 @@ export default function AssetDetailsClient() {
                       onClick={() => {
                         if (activeReviewSide) handleSaveSideReview(reviewNoteId!, activeReviewSide, 'Approved');
                       }}
-                      className="py-3 bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-emerald-500 transition-all shadow-lg shadow-emerald-900/20"
+                      className="py-4 bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl hover:bg-emerald-500 transition-all shadow-xl shadow-emerald-900/20 font-serif"
                     >
                       Approve {activeReviewSide}
                     </button>
@@ -2076,17 +2078,17 @@ export default function AssetDetailsClient() {
                   <>
                     <button 
                       onClick={() => handleAddReviewNote(reviewNoteId!)} 
-                      className="py-2.5 bg-orange-600/20 border border-orange-500/50 text-orange-500 text-[9px] font-black uppercase tracking-widest rounded-xl hover:bg-orange-600 hover:text-white transition-all shadow-lg shadow-orange-900/10"
+                      className="py-4 bg-orange-600/10 border border-orange-500/30 text-orange-500 text-[10px] font-black uppercase tracking-widest rounded-2xl hover:bg-orange-600 hover:text-white transition-all shadow-xl font-serif"
                     >
-                      Correction
+                      Request Refining
                     </button>
                     <button 
                       onClick={() => {
                         if (currentVersion) handleApproveVersion(currentVersion);
                       }} 
-                      className="py-2.5 bg-emerald-600 text-white text-[9px] font-black uppercase tracking-widest rounded-xl hover:bg-emerald-500 transition-all shadow-lg shadow-emerald-900/20"
+                      className="py-4 bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl hover:bg-emerald-500 transition-all shadow-xl shadow-emerald-900/20 font-serif"
                     >
-                      Approve
+                      Grant Approval
                     </button>
                   </>
                 )}
@@ -2108,9 +2110,9 @@ export default function AssetDetailsClient() {
                         setReviewNoteId(null);
                         fetchAssetAndVersions(assetId!);
                       }}
-                      className="w-full py-2 bg-white/5 text-slate-400 text-[8px] font-bold uppercase tracking-widest rounded-lg border border-white/5 hover:bg-white/10 transition-all"
+                      className="w-full py-3 bg-white/5 text-slate-500 text-[9px] font-black uppercase tracking-widest rounded-xl border border-white/5 hover:bg-white/10 transition-all font-serif"
                     >
-                      Save Note Only
+                      Seal Note Only
                     </button>
                   </motion.div>
                 </>
@@ -2133,7 +2135,7 @@ export default function AssetDetailsClient() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
-              className="cinematic-glass rounded-[32px] border border-white/10 shadow-2xl w-full max-w-md p-8 relative overflow-hidden"
+              className="epic-glass rounded-[32px] border border-white/10 shadow-2xl w-full max-w-md p-8 relative overflow-hidden ornate-border"
             >
               <div className="flex justify-between items-center mb-8">
                 <div className="flex items-center gap-3">
@@ -2141,21 +2143,24 @@ export default function AssetDetailsClient() {
                     <Plus className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <h2 className="text-2xl font-bold text-white uppercase tracking-tight">Create Variation</h2>
+                    <h2 className="text-2xl font-bold text-white uppercase tracking-tight font-serif">Splice Variation</h2>
                     <p className="text-slate-500 text-[9px] font-bold tracking-[0.2em] uppercase">For {asset.name}</p>
                   </div>
                 </div>
+                <button onClick={() => setIsAddVariationModalOpen(false)} className="p-2 text-slate-500 hover:text-white transition">
+                  <X className="w-6 h-6" />
+                </button>
               </div>
 
               <form onSubmit={handleAddVariation} className="space-y-6">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Variation Name</label>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Variation Identity</label>
                   <input 
                     type="text" 
                     required 
                     value={newVariationName} 
                     onChange={(e) => setNewVariationName(e.target.value)} 
-                    className="w-full px-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl text-white font-bold focus:border-orange-500 outline-none transition uppercase tracking-widest" 
+                    className="w-full px-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl text-white font-bold focus:border-orange-500 outline-none transition uppercase tracking-widest placeholder:text-slate-700" 
                     placeholder={`E.G. ${asset.name}_V1`} 
                   />
                 </div>
@@ -2164,15 +2169,15 @@ export default function AssetDetailsClient() {
                   <button
                     type="button"
                     onClick={() => setIsAddVariationModalOpen(false)}
-                    className="flex-1 py-4 bg-white/5 text-slate-500 font-black uppercase tracking-widest text-xs rounded-2xl hover:bg-white/10 transition-all"
+                    className="flex-1 py-4 bg-white/5 text-slate-500 font-black uppercase tracking-widest text-xs rounded-2xl hover:bg-white/10 transition-all border border-white/5 font-serif"
                   >
-                    Cancel
+                    Retreat
                   </button>
                   <button
                     type="submit"
-                    className="flex-[2] py-4 bg-orange-600 text-white font-black uppercase tracking-widest text-xs rounded-2xl shadow-xl shadow-orange-900/20 transition-all"
+                    className="flex-[2] py-4 bg-orange-600 text-white font-black uppercase tracking-widest text-xs rounded-2xl shadow-xl shadow-orange-900/20 hover:bg-orange-500 transition-all font-serif"
                   >
-                    Create Variation
+                    Enshrine Variation
                   </button>
                 </div>
               </form>
@@ -2194,7 +2199,7 @@ export default function AssetDetailsClient() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
-              className="cinematic-glass rounded-[32px] border border-white/10 shadow-2xl w-full max-w-md p-8 relative overflow-hidden"
+              className="epic-glass rounded-[32px] border border-white/10 shadow-2xl w-full max-w-md p-8 relative overflow-hidden ornate-border"
             >
               <div className="flex justify-between items-center mb-8">
                 <div className="flex items-center gap-3">
@@ -2202,8 +2207,8 @@ export default function AssetDetailsClient() {
                     <Zap className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <h2 className="text-2xl font-bold text-white uppercase tracking-tight">Confirm Dispatch</h2>
-                    <p className="text-slate-500 text-[9px] font-bold tracking-[0.2em] uppercase">Log vendor notification email</p>
+                    <h2 className="text-2xl font-bold text-white uppercase tracking-tight font-serif">Confirm Dispatch</h2>
+                    <p className="text-slate-500 text-[9px] font-bold tracking-[0.2em] uppercase">Oracle notification logged</p>
                   </div>
                 </div>
                 <button onClick={() => { setIsEmailModalOpen(false); setTargetVersion(null); }} className="p-2 text-slate-500 hover:text-white transition">
@@ -2213,18 +2218,18 @@ export default function AssetDetailsClient() {
 
               <div className="space-y-6">
                 <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5">
-                  <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest block mb-1">Target Stage</span>
+                  <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest block mb-1">Target Milestone</span>
                   <span className="text-sm font-bold text-white uppercase">{targetVersion?.stage}</span>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Email / Thread Link (Optional)</label>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Oracle Msg / Thread Link</label>
                   <input 
                     type="url" 
                     value={emailLinkInput} 
                     onChange={(e) => setEmailLinkInput(e.target.value)} 
                     className="w-full px-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl text-white font-bold focus:border-blue-500 outline-none transition placeholder:text-slate-700" 
-                    placeholder="https://mail.google.com/..." 
+                    placeholder="https://oracle.link/..." 
                   />
                 </div>
 
@@ -2232,15 +2237,15 @@ export default function AssetDetailsClient() {
                   <button
                     type="button"
                     onClick={() => { setIsEmailModalOpen(false); setTargetVersion(null); }}
-                    className="flex-1 py-4 bg-white/5 text-slate-500 font-black uppercase tracking-widest text-xs rounded-2xl hover:bg-white/10 transition-all border border-white/5"
+                    className="flex-1 py-4 bg-white/5 text-slate-500 font-black uppercase tracking-widest text-xs rounded-2xl hover:bg-white/10 transition-all border border-white/5 font-serif"
                   >
-                    Cancel
+                    Retreat
                   </button>
                   <button
                     onClick={handleConfirmEmailLink}
-                    className="flex-[2] py-4 bg-blue-600 text-white font-black uppercase tracking-widest text-xs rounded-2xl shadow-xl shadow-blue-900/20 hover:bg-blue-500 transition-all active:scale-[0.98]"
+                    className="flex-[2] py-4 bg-blue-600 text-white font-black uppercase tracking-widest text-xs rounded-2xl shadow-xl shadow-blue-900/20 hover:bg-blue-500 transition-all font-serif"
                   >
-                    Confirm & Notify
+                    Confirm & Proceed
                   </button>
                 </div>
               </div>
