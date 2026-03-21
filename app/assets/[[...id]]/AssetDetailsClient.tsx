@@ -498,8 +498,10 @@ export default function AssetDetailsClient() {
           await Promise.all(deletePromises);
 
           // Delete the asset itself
-          await deleteDoc(doc(db, "assets", assetId));
-          window.location.href = "/";
+          if (assetId) {
+            await deleteDoc(doc(db, "assets", assetId));
+            window.location.href = "/";
+          }
         } catch (err) {
           console.error("Delete failed", err);
           setModalConfig({
