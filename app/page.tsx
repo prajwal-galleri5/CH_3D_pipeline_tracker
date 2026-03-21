@@ -3,8 +3,8 @@
 import { useEffect, useState, Fragment } from "react";
 import { collection, getDocs, orderBy, query, where, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Asset, Version } from "@/types";
-import { Plus, Boxes, CheckCircle, Trash2, ChevronRight } from "lucide-react";
+import { Asset, Version, AssetType, StudioName } from "@/types";
+import { Plus, Boxes, CheckCircle, Trash2, ChevronRight, User, Box, Shield, Car, Building2, Filter } from "lucide-react";
 import { AddAssetModal } from "@/components/AddAssetModal";
 import ThematicModal from "@/components/ThematicModal";
 import { motion } from "framer-motion";
@@ -17,6 +17,8 @@ export default function Home() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [error, setError] = useState("");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [activeCategory, setActiveCategory] = useState<AssetType | 'All'>('All');
+  const [activeStudio, setActiveStudio] = useState<StudioName | 'All'>('All');
 
   // Thematic Modal State
   const [isThematicModalOpen, setIsThematicModalOpen] = useState(false);
@@ -54,6 +56,12 @@ export default function Home() {
 
   const mainAssets = assets.filter(a => !a.parentId);
   const variations = assets.filter(a => a.parentId);
+
+  const filteredMainAssets = mainAssets.filter(a => {
+    const categoryMatch = activeCategory === 'All' || a.type === activeCategory;
+    const studioMatch = activeStudio === 'All' || a.studio === activeStudio;
+    return categoryMatch && studioMatch;
+  });
 
   const getParentName = (parentId: string) => {
     const parent = assets.find(a => a.id === parentId);
@@ -329,14 +337,15 @@ export default function Home() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-full mx-auto px-4 py-8">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6 max-w-7xl mx-auto">
+      {/* Header Row */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-6 max-w-7xl mx-auto">
         <div>
           <div className="flex items-center gap-2 mb-2">
             <div className="w-8 h-1 bg-orange-600 rounded-full"></div>
             <span className="text-orange-500 font-bold uppercase tracking-[0.3em] text-[10px]">Operations</span>
           </div>
           <h1 className="text-4xl font-black tracking-tighter text-white leading-tight uppercase">
-            Character <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-red-600">Pipeline</span>
+            {activeCategory === 'All' ? 'Character' : activeCategory} <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-red-600">Pipeline</span>
           </h1>
         </div>
 
@@ -345,12 +354,69 @@ export default function Home() {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-6 py-3 bg-orange-600 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all shadow-lg whitespace-nowrap shadow-orange-900/20"
+            className="flex items-center gap-2 px-6 py-3 bg-orange-600 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all shadow-lg whitespace-nowrap shadow-orange-900/20 w-full md:w-auto justify-center"
           >
             <Plus className="w-4 h-4" />
             <span>Initialize Production</span>
           </motion.button>
         )}
+      </div>
+
+      {/* Filters Row */}
+      <div className="flex flex-col lg:flex-row items-center gap-4 mb-10 max-w-7xl mx-auto">
+        <div className="flex items-center gap-2 px-2 text-slate-600">
+          <Filter className="w-3 h-3" />
+          <span className="text-[8px] font-black uppercase tracking-[0.2em]">Filter Engine</span>
+        </div>
+        
+        {/* Studio Filter UI */}
+        <div className="flex items-center bg-white/5 border border-white/10 rounded-2xl p-1 gap-1 w-full lg:w-auto overflow-x-auto custom-scrollbar">
+          {[
+            { id: 'All', label: 'All Studios', icon: Building2 },
+            { id: 'Xentrix', label: 'Xentrix' },
+            { id: 'Innovative Colors', label: 'Innovative' },
+            { id: 'Inhouse', label: 'Inhouse' }
+          ].map((studio) => (
+            <button
+              key={studio.id}
+              onClick={() => setActiveStudio(studio.id as any)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
+                activeStudio === studio.id 
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' 
+                  : 'text-slate-500 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              {studio.icon && <studio.icon className="w-3.5 h-3.5" />}
+              <span>{studio.label}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="hidden lg:block w-px h-4 bg-white/10 mx-2"></div>
+
+        {/* Category Filter UI */}
+        <div className="flex items-center bg-white/5 border border-white/10 rounded-2xl p-1 gap-1 w-full lg:w-auto overflow-x-auto custom-scrollbar">
+          {[
+            { id: 'All', label: 'All Categories', icon: Boxes },
+            { id: 'Character', label: 'Characters', icon: User },
+            { id: 'Prop', label: 'Props', icon: Box },
+            { id: 'Weapon', label: 'Weapons', icon: Shield },
+            { id: 'Vehicle', label: 'Vehicles', icon: Car }
+          ].map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => setActiveCategory(cat.id as any)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
+                activeCategory === cat.id 
+                  ? 'bg-orange-600 text-white shadow-lg shadow-orange-900/20' 
+                  : 'text-slate-500 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <cat.icon className="w-3.5 h-3.5" />
+              <span>{cat.label}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {loading ? (
@@ -374,7 +440,7 @@ export default function Home() {
               <table className="w-full text-left border-collapse table-fixed min-w-[1200px]">
                 <thead>
                   <tr className="bg-white/[0.03] border-b border-white/5 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
-                    <th className="px-6 py-5 w-[250px] sticky left-0 bg-slate-900/95 backdrop-blur-md z-20 border-r border-white/5">Character</th>
+                    <th className="px-6 py-5 w-[250px] sticky left-0 bg-slate-900/95 backdrop-blur-md z-20 border-r border-white/5">Asset Name</th>
                     <th className="px-6 py-5 w-[150px]">Studio</th>
                     <th className="px-6 py-5 w-[150px]">Artist</th>
                     <th className="px-6 py-5 text-center bg-blue-500/[0.02]">Base input</th>
@@ -385,7 +451,7 @@ export default function Home() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {mainAssets.map((asset) => renderAssetRow(asset))}
+                  {filteredMainAssets.map((asset) => renderAssetRow(asset))}
                 </tbody>
               </table>
             </div>
