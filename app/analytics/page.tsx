@@ -187,16 +187,16 @@ export default function Analytics() {
   const activeMainAssetsCount = displayedAssets.filter(a => !a.parentId).length;
 
   const stats = [
-    { label: selectedDate ? "Daily Efficiency" : "Pipeline Efficiency", value: `${efficiencyRate}%`, icon: Zap, color: "text-yellow-500" },
-    { label: selectedDate ? "Assets Worked On" : "Active Characters", value: activeMainAssetsCount, icon: Package, color: "text-blue-500" },
-    { label: selectedDate ? "Events Today" : "Total Milestones", value: filteredOps.length, icon: Activity, color: "text-purple-500" },
+    { label: selectedDate ? "Daily Efficiency" : "Pipeline Efficiency", value: `${efficiencyRate}%`, icon: Zap, color: "text-orange-500" },
+    { label: selectedDate ? "Assets Worked On" : "Active Characters", value: activeMainAssetsCount, icon: Package, color: "text-orange-500" },
+    { label: selectedDate ? "Events Today" : "Total Milestones", value: filteredOps.length, icon: Activity, color: "text-red-500" },
     { label: "Artists involved", value: new Set(displayedAssets.flatMap(a => a.assignedArtists || [])).size, icon: Users, color: "text-emerald-500" }
   ];
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center py-40 gap-4">
-      <div className="w-10 h-10 border-2 border-blue-600/20 border-t-blue-600 rounded-full animate-spin"></div>
-      <span className="text-blue-500 font-bold tracking-widest text-[10px]">Processing Pipeline Data...</span>
+      <div className="w-12 h-12 border-2 border-orange-600/20 border-t-orange-600 rounded-full animate-spin"></div>
+      <span className="text-orange-500 font-bold tracking-widest text-[10px] animate-pulse uppercase">Syncing Pipeline Data...</span>
     </div>
   );
 
@@ -213,7 +213,7 @@ export default function Analytics() {
     return (
       <Fragment key={asset.id}>
         <tr 
-          className={`group hover:bg-white/[0.02] transition-all cursor-pointer ${asset.parentId ? 'bg-white/[0.01]' : ''}`}
+          className={`group hover:bg-white/[0.02] transition-all cursor-pointer ${asset.parentId ? 'bg-indigo-500/[0.03]' : ''}`}
           onClick={() => window.location.href = `/assets/${asset.id}`}
         >
           <td className="px-8 py-5">
@@ -227,10 +227,10 @@ export default function Analytics() {
                 </button>
               )}
               {asset.parentId && (
-                <div className="w-3 h-3 border-l border-b border-white/20 rounded-bl-sm ml-2 flex-shrink-0" />
+                <div className="w-3 h-3 border-l border-b border-indigo-500/30 rounded-bl-sm ml-2 flex-shrink-0" />
               )}
               <div className="flex flex-col min-w-0">
-                <span className={`text-sm font-black text-white uppercase tracking-tight group-hover:text-orange-400 transition-colors ${asset.parentId ? 'text-slate-400' : ''}`}>
+                <span className={`text-sm font-black uppercase tracking-tight group-hover:text-orange-400 transition-colors ${asset.parentId ? 'text-indigo-400' : 'text-white'}`}>
                   {asset.name}
                 </span>
                 <div className="flex items-center gap-2 mt-0.5">
@@ -238,7 +238,7 @@ export default function Analytics() {
                   {asset.parentId && (
                     <>
                       <span className="w-1 h-1 rounded-full bg-slate-800"></span>
-                      <span className="text-[7px] font-black text-slate-600 uppercase">Variation</span>
+                      <span className="text-[7px] font-black text-indigo-400 uppercase">Variation</span>
                     </>
                   )}
                   <span className="w-1 h-1 rounded-full bg-slate-800"></span>
@@ -249,8 +249,9 @@ export default function Analytics() {
           </td>
           <td className="px-6 py-5 text-center">
             <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border ${
-              asset.status === 'Approved' ? 'text-emerald-500 border-emerald-500/20 bg-emerald-500/5' :
-              asset.status === 'Final Review' ? 'text-orange-500 border-orange-500/20 bg-orange-500/5' :
+              asset.status === 'Approved' ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5' :
+              asset.status === 'Final Review' ? 'text-orange-400 border-orange-500/20 bg-orange-500/5' :
+              asset.status === 'RM Approved' ? 'text-emerald-400 border-emerald-500/50 bg-emerald-500/20' :
               'text-slate-400 border-white/5 bg-white/5'
             }`}>
               {asset.status}
@@ -264,7 +265,7 @@ export default function Analytics() {
                   animate={{ width: `${progress}%` }}
                   className={`h-full absolute top-0 left-0 ${
                     progress === 100 ? 'bg-emerald-500' : 
-                    groupName === 'Primary' ? 'bg-orange-500' : 'bg-blue-500'
+                    groupName === 'Primary' ? 'bg-orange-500' : 'bg-indigo-500'
                   }`}
                 />
               </div>
@@ -285,7 +286,7 @@ export default function Analytics() {
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{asset.assignedArtists?.[0] || "—"}</span>
           </td>
           <td className="px-8 py-5 text-right">
-            <span className={`text-sm font-black tabular-nums ${progress === 100 ? 'text-emerald-500' : 'text-blue-500'}`}>
+            <span className={`text-sm font-black tabular-nums ${progress === 100 ? 'text-emerald-500' : 'text-orange-500'}`}>
               {Math.round(progress)}%
             </span>
           </td>
@@ -296,16 +297,16 @@ export default function Analytics() {
   };
 
   return (
-    <div className="max-w-full mx-auto px-4 py-12 custom-scrollbar">
-      <div className="max-w-7xl mx-auto mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <Link href="/" className="inline-flex items-center text-[10px] font-bold text-slate-500 hover:text-blue-500 uppercase tracking-widest transition-colors">
+    <div className="max-w-full mx-auto px-4 py-8 custom-scrollbar">
+      <div className="max-w-7xl mx-auto mb-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <Link href="/" className="inline-flex items-center text-[10px] font-bold text-slate-500 hover:text-orange-500 uppercase tracking-widest transition-colors">
           <ArrowLeft className="w-3 h-3 mr-2" /> Back to Dashboard
         </Link>
 
         {/* Custom Date Picker */}
         <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-2xl px-4 py-2 self-start md:self-auto">
           <div className="flex items-center gap-2 border-r border-white/10 pr-3">
-            <Calendar className="w-3.5 h-3.5 text-blue-500" />
+            <Calendar className="w-3.5 h-3.5 text-orange-500" />
             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Filter Date</span>
           </div>
           <div className="flex items-center gap-2">
@@ -325,21 +326,21 @@ export default function Analytics() {
               </button>
             )}
           </div>
-          {!selectedDate && <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest">All Time</span>}
+          {!selectedDate && <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest">All Time</span>}
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto mb-12">
         <div className="flex items-center gap-2 mb-2">
-          <div className="w-8 h-1 bg-blue-600 rounded-full"></div>
-          <span className="text-blue-500 font-bold uppercase tracking-widest text-[10px]">Strategic Analytics</span>
+          <div className="w-8 h-1 bg-orange-600 rounded-full"></div>
+          <span className="text-orange-500 font-bold uppercase tracking-[0.3em] text-[10px]">Strategic Analytics</span>
         </div>
-        <h1 className="text-4xl font-bold tracking-tight text-white leading-tight uppercase">
-          Pipeline <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">Intelligence</span>
+        <h1 className="text-4xl font-black tracking-tighter text-white leading-tight uppercase">
+          Pipeline <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-red-600">Intelligence</span>
         </h1>
         {selectedDate && (
           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mt-2 flex items-center gap-2">
-            <Activity className="w-3 h-3 text-emerald-500" /> Showing activity for {new Date(selectedDate).toLocaleDateString(undefined, { dateStyle: 'full' })}
+            <Activity className="w-3 h-3 text-orange-500" /> Showing activity for {new Date(selectedDate).toLocaleDateString(undefined, { dateStyle: 'full' })}
           </p>
         )}
       </div>
@@ -356,8 +357,8 @@ export default function Analytics() {
             <div className={`p-3 rounded-xl bg-white/5 inline-flex mb-4 ${stat.color}`}>
               <stat.icon className="w-5 h-5" />
             </div>
-            <div className="text-3xl font-black text-white mb-1">{stat.value}</div>
-            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{stat.label}</div>
+            <div className="text-3xl font-black text-white mb-1 tabular-nums">{stat.value}</div>
+            <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{stat.label}</div>
           </motion.div>
         ))}
       </div>
@@ -369,7 +370,7 @@ export default function Analytics() {
             <div className="w-8 h-1 bg-emerald-600 rounded-full"></div>
             <span className="text-emerald-500 font-bold uppercase tracking-widest text-[10px]">Team Analytics</span>
           </div>
-          <h2 className="text-3xl font-bold text-white uppercase tracking-tight">Artist Intelligence</h2>
+          <h2 className="text-3xl font-black text-white uppercase tracking-tight">Artist Intelligence</h2>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -389,7 +390,6 @@ export default function Analytics() {
               : 0;
 
             const active = artistAssets.filter(a => a.status !== 'Approved' && a.status !== 'Completed' && a.status !== 'RM Approved');
-            const completed = artistAssets.filter(a => a.status === 'Approved' || a.status === 'Completed' || a.status === 'RM Approved');
 
             return (
               <motion.div
@@ -418,7 +418,7 @@ export default function Analytics() {
                     <div className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">Involved</div>
                   </div>
                   <div className="p-3 rounded-2xl bg-white/[0.02] border border-white/5">
-                    <div className="text-lg font-black text-blue-400 tabular-nums">{artistOps.length}</div>
+                    <div className="text-lg font-black text-orange-400 tabular-nums">{artistOps.length}</div>
                     <div className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">Events</div>
                   </div>
                 </div>
@@ -437,14 +437,14 @@ export default function Analytics() {
                           className="flex flex-col gap-1.5 p-2 rounded-xl bg-white/5 hover:bg-emerald-500/10 transition-colors cursor-pointer group/item"
                         >
                           <div className="flex items-center justify-between text-[10px]">
-                            <span className="text-white font-bold truncate mr-2">{asset.name}</span>
-                            <span className="text-blue-500 font-black shrink-0">{progress}%</span>
+                            <span className="text-white font-black uppercase truncate mr-2">{asset.name}</span>
+                            <span className="text-orange-500 font-black shrink-0">{progress}%</span>
                           </div>
                           <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
                             <motion.div 
                               initial={{ width: 0 }}
                               animate={{ width: `${progress}%` }}
-                              className="h-full bg-blue-500 group-hover/item:bg-emerald-500 transition-colors"
+                              className="h-full bg-orange-500 group-hover/item:bg-emerald-500 transition-colors"
                             />
                           </div>
                         </div>
@@ -462,10 +462,10 @@ export default function Analytics() {
       <div className="max-w-7xl mx-auto mb-16">
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-2">
-            <div className="w-8 h-1 bg-blue-600 rounded-full"></div>
-            <span className="text-blue-500 font-bold uppercase tracking-widest text-[10px]">Team Analytics</span>
+            <div className="w-8 h-1 bg-indigo-600 rounded-full"></div>
+            <span className="text-indigo-500 font-bold uppercase tracking-widest text-[10px]">Team Analytics</span>
           </div>
-          <h2 className="text-3xl font-bold text-white uppercase tracking-tight">Reviewer Intelligence</h2>
+          <h2 className="text-3xl font-black text-white uppercase tracking-tight">Reviewer Intelligence</h2>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -502,14 +502,14 @@ export default function Analytics() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: idx * 0.05 }}
-                className="cinematic-glass p-6 rounded-3xl border border-white/5 flex flex-col group hover:border-blue-500/30 transition-all"
+                className="cinematic-glass p-6 rounded-3xl border border-white/5 flex flex-col group hover:border-indigo-500/30 transition-all"
               >
                 <div className="flex items-center gap-4 mb-6">
-                  <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500 shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-500 shrink-0">
                     <ShieldCheck className="w-5 h-5" />
                   </div>
                   <div className="min-w-0">
-                    <h3 className="text-base font-black text-white uppercase truncate group-hover:text-blue-400 transition-colors">{reviewer.name}</h3>
+                    <h3 className="text-base font-black text-white uppercase truncate group-hover:text-indigo-400 transition-colors">{reviewer.name}</h3>
                     <div className="flex items-center gap-1.5">
                       <div className={`w-1.5 h-1.5 rounded-full ${agilityLabel === 'Elite' || agilityLabel === 'High' ? 'bg-emerald-500' : agilityLabel === 'Standard' ? 'bg-yellow-500' : 'bg-slate-500'}`}></div>
                       <span className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">{agilityLabel} Agility</span>
@@ -539,10 +539,10 @@ export default function Analytics() {
                         <div 
                           key={v.id} 
                           onClick={() => window.location.href = `/assets/${v.assetId}`}
-                          className="flex flex-col gap-1 p-2 rounded-xl bg-white/5 hover:bg-blue-500/10 transition-colors cursor-pointer group/item"
+                          className="flex flex-col gap-1 p-2 rounded-xl bg-white/5 hover:bg-indigo-500/10 transition-colors cursor-pointer group/item"
                         >
                           <div className="flex items-center justify-between text-[10px]">
-                            <span className="text-white font-bold truncate mr-2">{asset?.name || "Unknown"}</span>
+                            <span className="text-white font-black truncate mr-2">{asset?.name || "Unknown"}</span>
                             <span className={`text-[8px] font-black shrink-0 ${v.status.includes('Approved') ? 'text-emerald-500' : 'text-orange-500'}`}>
                               {v.stage.split(' ')[0]}
                             </span>
@@ -562,10 +562,10 @@ export default function Analytics() {
       <div className="max-w-7xl mx-auto mb-16">
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-2">
-            <div className="w-8 h-1 bg-purple-600 rounded-full"></div>
-            <span className="text-purple-500 font-bold uppercase tracking-widest text-[10px]">Workforce Performance</span>
+            <div className="w-8 h-1 bg-orange-600 rounded-full"></div>
+            <span className="text-orange-500 font-bold uppercase tracking-widest text-[10px]">Workforce Performance</span>
           </div>
-          <h2 className="text-3xl font-bold text-white uppercase tracking-tight">Performance Breakdown</h2>
+          <h2 className="text-3xl font-black text-white uppercase tracking-tight">Performance Breakdown</h2>
         </div>
 
         <motion.div 
@@ -681,7 +681,6 @@ export default function Analytics() {
                         return v.status === 'Corrections Needed';
                       }).length;
                   
-                  const consistency = totalEvents > 0 ? Math.round(((totalEvents - totalReworks) / totalEvents) * 100) : 0;
                   const efficiency = validOps.length > 0 ? Math.round((onTime / validOps.length) * 100) : 0;
 
                   return (
@@ -689,13 +688,13 @@ export default function Analytics() {
                       <td className="px-8 py-5">
                         <div className="flex items-center gap-4">
                           <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                            member.role === 'Reviewer' ? 'bg-blue-500/10 text-blue-500' : 
-                            member.role === 'Ops' ? 'bg-purple-500/10 text-purple-500' : 'bg-emerald-500/10 text-emerald-500'
+                            member.role === 'Reviewer' ? 'bg-indigo-500/10 text-indigo-500' : 
+                            member.role === 'Ops' ? 'bg-orange-500/10 text-orange-500' : 'bg-emerald-500/10 text-emerald-500'
                           }`}>
                             {member.role === 'Reviewer' ? <ShieldCheck className="w-5 h-5" /> : member.role === 'Ops' ? <Activity className="w-5 h-5" /> : <Users className="w-5 h-5" />}
                           </div>
                           <div>
-                            <div className="text-sm font-black text-white uppercase tracking-tight group-hover:text-purple-400 transition-colors">{member.name}</div>
+                            <div className="text-sm font-black text-white uppercase tracking-tight group-hover:text-orange-400 transition-colors">{member.name}</div>
                             <div className="text-[8px] font-bold text-slate-500 uppercase tracking-[0.2em]">{member.role}</div>
                           </div>
                         </div>
@@ -706,7 +705,7 @@ export default function Analytics() {
                       <td className="px-6 py-5 text-center">
                         <div className="flex items-center justify-center gap-3">
                           <div className="text-center">
-                            <div className="text-sm font-bold text-blue-400 tabular-nums">{active}</div>
+                            <div className="text-sm font-bold text-orange-400 tabular-nums">{active}</div>
                             <div className="text-[7px] font-black text-slate-600 uppercase">Active</div>
                           </div>
                           <div className="w-px h-4 bg-white/5"></div>
@@ -728,7 +727,7 @@ export default function Analytics() {
                       </td>
                       <td className="px-6 py-5 text-center">
                         <div className="flex flex-col items-center">
-                          <span className={`text-sm font-black tabular-nums ${productionPower >= 50 ? 'text-purple-400' : 'text-slate-400'}`}>{productionPower}</span>
+                          <span className={`text-sm font-black tabular-nums ${productionPower >= 50 ? 'text-orange-400' : 'text-slate-400'}`}>{productionPower}</span>
                           <span className="text-[7px] font-bold text-slate-600 uppercase">Power Pts</span>
                         </div>
                       </td>
@@ -766,21 +765,21 @@ export default function Analytics() {
                   <div className={`w-8 h-1 rounded-full ${
                     groupName === 'Primary' ? 'bg-orange-500' : 
                     groupName === 'Inhouse' ? 'bg-emerald-500' : 
-                    'bg-blue-500'
+                    'bg-indigo-500'
                   }`}></div>
-                  <span className={`font-bold uppercase tracking-widest text-[10px] ${
+                  <span className={`font-black uppercase tracking-widest text-[10px] ${
                     groupName === 'Primary' ? 'text-orange-500' : 
                     groupName === 'Inhouse' ? 'text-emerald-500' : 
-                    'text-blue-500'
+                    'text-indigo-500'
                   }`}>{groupName === 'Inhouse' ? 'Studio Internal' : `${groupName} Priority`}</span>
                 </div>
-                <h2 className="text-3xl font-bold text-white uppercase tracking-tight">
+                <h2 className="text-3xl font-black text-white uppercase tracking-tight">
                   {groupName === 'Inhouse' ? 'Inhouse Progression' : `${groupName} Asset Flow`}
                 </h2>
               </div>
               <div className="text-right">
                 <div className="text-2xl font-black text-white tabular-nums">{groupAssets.length}</div>
-                <div className="text-[8px] font-bold text-slate-500 uppercase tracking-widest text-right">Involved Today</div>
+                <div className="text-[8px] font-black text-slate-500 uppercase tracking-widest text-right">Involved Today</div>
               </div>
             </div>
 
@@ -804,7 +803,7 @@ export default function Analytics() {
                   <tbody className="divide-y divide-white/5">
                     {groupAssets.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-8 py-20 text-center text-slate-700 font-bold uppercase tracking-widest text-[10px]">
+                        <td colSpan={5} className="px-8 py-20 text-center text-slate-700 font-black uppercase tracking-widest text-[10px]">
                           No assets involved on this date
                         </td>
                       </tr>
@@ -825,21 +824,21 @@ export default function Analytics() {
           animate={{ opacity: 1, scale: 1 }}
           className="lg:col-span-2 cinematic-glass p-8 rounded-3xl border border-white/5 h-[400px] flex flex-col"
         >
-          <h3 className="text-lg font-bold text-white uppercase tracking-tight mb-8">Operational Velocity (Last 14 Days)</h3>
+          <h3 className="text-lg font-black text-white uppercase tracking-tight mb-8">Operational Velocity (Last 14 Days)</h3>
           <div className="flex-1 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={getActivityData()}>
                 <defs>
                   <linearGradient id="colorEvents" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="#f97316" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#f97316" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
                 <XAxis dataKey="date" stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
                 <YAxis stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
                 <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #ffffff10', borderRadius: '12px' }} />
-                <Area type="monotone" dataKey="events" stroke="#3b82f6" fillOpacity={1} fill="url(#colorEvents)" strokeWidth={3} />
+                <Area type="monotone" dataKey="events" stroke="#f97316" fillOpacity={1} fill="url(#colorEvents)" strokeWidth={3} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -850,7 +849,7 @@ export default function Analytics() {
           animate={{ opacity: 1, scale: 1 }}
           className="cinematic-glass p-8 rounded-3xl border border-white/5 h-[400px] flex flex-col"
         >
-          <h3 className="text-lg font-bold text-white uppercase tracking-tight mb-8">Delivery Timeliness</h3>
+          <h3 className="text-lg font-black text-white uppercase tracking-tight mb-8">Delivery Timeliness</h3>
           <div className="flex-1 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
